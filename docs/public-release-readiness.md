@@ -44,7 +44,8 @@ and a reviewed support and security process.
 - [x] Keep Actions pinned to immutable commit SHAs.
 - [ ] Enable branch protection after the first green remote run.
 - [ ] Require pull requests and successful checks for future changes.
-- [ ] Add Dependabot grouping and a documented dependency-update cadence.
+- [x] Group weekly Dependabot updates into at most one Python PR and one GitHub
+  Actions PR per cycle.
 
 ### 2. Public Distribution
 
