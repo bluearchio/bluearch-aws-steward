@@ -1,0 +1,2721 @@
+{
+  "schema_version": "0.2",
+  "source": "bluearchio/aws-misconfig-db",
+  "rules": [
+    {
+      "id": "8ac617e8-5a7a-4da8-8084-7ef5e5cbc74c",
+      "short_id": "alb-access-logging-disabled",
+      "service": "alb",
+      "scenario": "Application Load Balancer access logging is disabled",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "alb_access_logging_disabled",
+      "remediation": {
+        "summary": "Enable ALB access logging to an existing reviewed S3 destination.",
+        "safety_level": "low_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "alb/elb",
+      "capabilities": [
+        "elbv2.describe_load_balancers",
+        "elbv2.describe_load_balancer_attributes",
+        "elbv2.describe_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "38ef673f-016f-4b10-ba8c-e0ab9d15494a",
+      "short_id": "alb-certificate-expiring",
+      "service": "alb",
+      "scenario": "ALB listener certificate expires within 30 days",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "alb_certificate_expiring",
+      "remediation": {
+        "summary": "Renew or replace the certificate before expiration, then verify every listener binding.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "warning_days": 30,
+        "critical_days": 7
+      },
+      "catalog_service": "alb/elb",
+      "capabilities": [
+        "elbv2.describe_load_balancers",
+        "elbv2.describe_listeners",
+        "elbv2.describe_listener_certificates",
+        "elbv2.describe_tags",
+        "acm.describe_certificate"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "b5337466-a827-460e-873e-613c28a101e4",
+      "short_id": "alb-https-listener-missing",
+      "service": "alb",
+      "scenario": "Internet-facing Application Load Balancer exposes HTTP without an HTTPS listener",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "alb_https_listener_missing",
+      "remediation": {
+        "summary": "Add a reviewed HTTPS listener and redirect HTTP after validating clients.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "alb/elb",
+      "capabilities": [
+        "elbv2.describe_load_balancers",
+        "elbv2.describe_listeners",
+        "elbv2.describe_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "475b24d9-4b5b-4ce4-8161-af25f89bee49",
+      "short_id": "alb-idle-load-balancer",
+      "service": "alb",
+      "scenario": "Application Load Balancer receives fewer than 100 requests per day for seven days",
+      "risk_detail": "cost",
+      "severity": "low",
+      "detector": "alb_idle_load_balancer",
+      "remediation": {
+        "summary": "Validate DNS, listeners, targets, and ownership before deleting the load balancer.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "maximum_daily_requests": 100
+      },
+      "catalog_service": "alb/elb",
+      "capabilities": [
+        "elbv2.describe_load_balancers",
+        "elbv2.describe_tags",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "01e58c92-8f90-4ef0-a438-e35bf01ecfd8",
+      "short_id": "alb-unhealthy-targets",
+      "service": "alb",
+      "scenario": "Application Load Balancer target group contains unhealthy registered targets",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "alb_unhealthy_targets",
+      "remediation": {
+        "summary": "Investigate health checks and workload state before changing registration or routing.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "alb/elb",
+      "capabilities": [
+        "elbv2.describe_load_balancers",
+        "elbv2.describe_target_groups",
+        "elbv2.describe_target_health",
+        "elbv2.describe_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "reliability",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "00b372b2-8825-4bdf-834f-b10742dc715b",
+      "short_id": "alb-weak-tls-policy",
+      "service": "alb",
+      "scenario": "ALB listener security policy permits a TLS protocol older than TLS 1.2",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "alb_weak_tls_policy",
+      "remediation": {
+        "summary": "Test clients before changing the listener to a modern TLS policy.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "alb/elb",
+      "capabilities": [
+        "elbv2.describe_load_balancers",
+        "elbv2.describe_listeners",
+        "elbv2.describe_ssl_policies",
+        "elbv2.describe_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "dca2e61d-15af-4931-a043-ff3b984a8e08",
+      "short_id": "api-gateway-access-logging-disabled",
+      "service": "api-gateway",
+      "scenario": "Deployed API Gateway REST API stage does not publish access logs",
+      "risk_detail": "security, operations",
+      "severity": "high",
+      "detector": "api_gateway_access_logging_disabled",
+      "remediation": {
+        "summary": "Configure structured access logs to an existing reviewed CloudWatch Logs group.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "api-gateway",
+      "capabilities": [
+        "apigateway.get_rest_apis",
+        "apigateway.get_stages",
+        "apigateway.get_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "bcf46b63-7bdb-4bcc-897a-70dde0abc60b",
+      "short_id": "api-gateway-execution-logging-disabled",
+      "service": "api-gateway",
+      "scenario": "Deployed API Gateway REST API stage has execution logging disabled",
+      "risk_detail": "security, operations",
+      "severity": "high",
+      "detector": "api_gateway_execution_logging_disabled",
+      "remediation": {
+        "summary": "Enable ERROR or INFO execution logging without enabling production data tracing.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "api-gateway",
+      "capabilities": [
+        "apigateway.get_rest_apis",
+        "apigateway.get_stages",
+        "apigateway.get_resources",
+        "apigateway.get_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "90de045c-f234-4b34-ab13-6e660ba2ab5a",
+      "short_id": "api-gateway-method-authorization-missing",
+      "service": "api-gateway",
+      "scenario": "API Gateway REST method allows unauthenticated access",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "api_gateway_method_authorization_missing",
+      "remediation": {
+        "summary": "Confirm whether the method is intentionally public before configuring authorization.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "api-gateway",
+      "capabilities": [
+        "apigateway.get_rest_apis",
+        "apigateway.get_stages",
+        "apigateway.get_resources",
+        "apigateway.get_method",
+        "apigateway.get_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "6ee0ddf4-c23a-443d-8e42-c1fa8dfde10a",
+      "short_id": "api-gateway-xray-tracing-disabled",
+      "service": "api-gateway",
+      "scenario": "Deployed API Gateway REST API stage has AWS X-Ray tracing disabled",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "api_gateway_xray_tracing_disabled",
+      "remediation": {
+        "summary": "Review sampling, data handling, and cost before enabling active X-Ray tracing.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "api-gateway",
+      "capabilities": [
+        "apigateway.get_rest_apis",
+        "apigateway.get_stages",
+        "apigateway.get_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "3eae64a8-7a42-4ffc-b552-6e7a8555d3c3",
+      "short_id": "cloudtrail-cloudwatch-integration-missing",
+      "service": "cloudtrail",
+      "scenario": "CloudTrail is not integrated with CloudWatch Logs",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "cloudtrail_cloudwatch_integration_missing",
+      "remediation": {
+        "summary": "Send CloudTrail events to a reviewed CloudWatch Logs group.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "cloudtrail",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "bbeaea1f-8aeb-4a4b-978c-7f05c0ed0722",
+      "short_id": "cloudtrail-kms-encryption-disabled",
+      "service": "cloudtrail",
+      "scenario": "CloudTrail logs are not encrypted with a customer-managed KMS key",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "cloudtrail_kms_encryption_disabled",
+      "remediation": {
+        "summary": "Configure a reviewed KMS key for CloudTrail log encryption.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "cloudtrail",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "450eb05d-23fe-47dc-83f0-4e13c1149c00",
+      "short_id": "cloudtrail-log-validation-disabled",
+      "service": "cloudtrail",
+      "scenario": "CloudTrail log file integrity validation is disabled",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "cloudtrail_log_validation_disabled",
+      "remediation": {
+        "summary": "Enable log file validation for the trail.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "cloudtrail",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "1a48e014-dc5b-4b3d-9e8a-4fa00ebd4223",
+      "short_id": "cloudtrail-multi-region-logging-disabled",
+      "service": "cloudtrail",
+      "scenario": "No active multi-region CloudTrail trail records account activity",
+      "risk_detail": "operations",
+      "severity": "high",
+      "detector": "cloudtrail_multi_region_logging_disabled",
+      "remediation": {
+        "summary": "Create or enable an actively logging multi-region trail.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "cloudtrail",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "e7b5c9a1-3f2d-4e8b-9c6a-1d5e8f2b4a3c",
+      "short_id": "cloudwatch-log-retention-missing",
+      "service": "cloudwatch",
+      "scenario": "CloudWatch Logs groups without retention policies accumulating costs indefinitely",
+      "risk_detail": "cost",
+      "severity": "low",
+      "detector": "cloudwatch_log_retention_missing",
+      "remediation": {
+        "summary": "Set a reviewed retention period for the CloudWatch Logs group.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "recommended_retention_days": 30,
+        "minimum_stored_bytes_for_cost_opportunity": 10485760,
+        "storage_cost_usd_per_gb_month": 0.03
+      },
+      "catalog_service": "cloudwatch",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "b4839001-ddb1-4001-c001-001000000001",
+      "short_id": "dynamodb-inactive-table",
+      "service": "dynamodb",
+      "scenario": "DynamoDB table has no reads or writes for 30 complete days",
+      "risk_detail": "cost, operations",
+      "severity": "low",
+      "detector": "dynamodb_inactive_table",
+      "remediation": {
+        "summary": "Confirm consumers, backups, and retention before deleting or exporting the table.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 30
+      },
+      "catalog_service": "dynamodb",
+      "capabilities": [
+        "dynamodb.list_tables",
+        "dynamodb.describe_table",
+        "dynamodb.list_tags_of_resource",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "b4839002-ddb2-4002-c002-002000000002",
+      "short_id": "dynamodb-on-demand-low-utilization",
+      "service": "dynamodb",
+      "scenario": "On-demand DynamoDB table averages fewer than 100 read and write requests per day",
+      "risk_detail": "cost",
+      "severity": "low",
+      "detector": "dynamodb_on_demand_low_utilization",
+      "remediation": {
+        "summary": "Compare actual traffic variability and reserved capacity economics before changing billing mode.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 14,
+        "maximum_daily_requests": 100.0
+      },
+      "catalog_service": "dynamodb",
+      "capabilities": [
+        "dynamodb.list_tables",
+        "dynamodb.describe_table",
+        "dynamodb.list_tags_of_resource",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "b4839004-ddb4-4004-c004-004000000004",
+      "short_id": "dynamodb-read-capacity-underutilized",
+      "service": "dynamodb",
+      "scenario": "Provisioned DynamoDB read capacity averages below 20 percent utilization",
+      "risk_detail": "cost, sustainability",
+      "severity": "low",
+      "detector": "dynamodb_read_capacity_underutilized",
+      "remediation": {
+        "summary": "Review traffic peaks and auto scaling before lowering provisioned read capacity.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 14,
+        "maximum_utilization_percent": 20.0
+      },
+      "catalog_service": "dynamodb",
+      "capabilities": [
+        "dynamodb.list_tables",
+        "dynamodb.describe_table",
+        "dynamodb.list_tags_of_resource",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization",
+        "sustainability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "b4839003-ddb3-4003-c003-003000000003",
+      "short_id": "dynamodb-standard-ia-candidate",
+      "service": "dynamodb",
+      "scenario": "Large DynamoDB Standard table is explicitly classified as infrequently accessed",
+      "risk_detail": "cost, sustainability",
+      "severity": "low",
+      "detector": "dynamodb_standard_ia_candidate",
+      "remediation": {
+        "summary": "Validate storage and request cost before changing the table class.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "minimum_size_bytes": 1073741824,
+        "requirement_tags": {
+          "bluearch:infrequent-access": "true"
+        }
+      },
+      "catalog_service": "dynamodb",
+      "capabilities": [
+        "dynamodb.list_tables",
+        "dynamodb.describe_table",
+        "dynamodb.list_tags_of_resource"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "cost_optimization",
+        "sustainability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "b4839005-ddb5-4005-c005-005000000005",
+      "short_id": "dynamodb-write-capacity-underutilized",
+      "service": "dynamodb",
+      "scenario": "Provisioned DynamoDB write capacity averages below 20 percent utilization",
+      "risk_detail": "cost, sustainability",
+      "severity": "low",
+      "detector": "dynamodb_write_capacity_underutilized",
+      "remediation": {
+        "summary": "Review traffic peaks and auto scaling before lowering provisioned write capacity.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 14,
+        "maximum_utilization_percent": 20.0
+      },
+      "catalog_service": "dynamodb",
+      "capabilities": [
+        "dynamodb.list_tables",
+        "dynamodb.describe_table",
+        "dynamodb.list_tags_of_resource",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization",
+        "sustainability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "33fc1c4b-3302-4eb4-8f10-a43041c80105",
+      "short_id": "ebs-iops-saturation",
+      "service": "ec2",
+      "scenario": "EBS volume workload reaches at least 95 percent of provisioned IOPS",
+      "risk_detail": "performance, reliability",
+      "severity": "medium",
+      "detector": "ebs_iops_saturation",
+      "remediation": {
+        "summary": "Validate workload and queue-depth evidence before changing IOPS or volume type.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "minimum_utilization_percent": 95.0
+      },
+      "catalog_service": "ebs",
+      "capabilities": [
+        "ec2.describe_volumes",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "performance",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "03060d2d-96d3-43aa-ba18-2968fc8a7189",
+      "short_id": "ebs-magnetic-volume-overutilized",
+      "service": "ec2",
+      "scenario": "EBS magnetic volume sustains more than 100 read and write operations per second",
+      "risk_detail": "performance, reliability",
+      "severity": "low",
+      "detector": "ebs_magnetic_volume_overutilized",
+      "remediation": {
+        "summary": "Benchmark an SSD replacement and migrate only through a reviewed storage plan.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "maximum_average_iops": 100.0
+      },
+      "catalog_service": "ebs",
+      "capabilities": [
+        "ec2.describe_volumes",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "performance",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "8312c521-673e-48df-aca3-ae6a284f7079",
+      "short_id": "ebs-orphaned-snapshot-or-ami",
+      "service": "ec2",
+      "scenario": "Owned EBS snapshot or AMI is old and no longer referenced",
+      "risk_detail": "cost",
+      "severity": "low",
+      "detector": "ebs_orphaned_snapshot_or_ami",
+      "remediation": {
+        "summary": "Confirm retention requirements before deregistering the AMI or deleting its snapshots.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "minimum_orphan_age_days": 90
+      },
+      "catalog_service": "ebs",
+      "capabilities": [
+        "ec2.describe_snapshots",
+        "ec2.describe_images",
+        "ec2.describe_instances",
+        "ec2.describe_launch_templates",
+        "ec2.describe_launch_template_versions"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "cost_optimization",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "7e35eb21-1180-43d0-8d7d-5bb01fff7874",
+      "short_id": "ec2-default-security-group-not-restricted",
+      "service": "ec2",
+      "scenario": "Default VPC security group contains ingress or egress rules",
+      "risk_detail": "security",
+      "severity": "medium",
+      "detector": "ec2_default_security_group_not_restricted",
+      "remediation": {
+        "summary": "Remove default-group rules after confirming no workload dependency.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "networking",
+      "capabilities": [
+        "ec2.describe_security_groups"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "a0ffe81c-483b-448e-a899-884e5258a106",
+      "short_id": "ec2-dev-schedule-missing",
+      "service": "ec2",
+      "scenario": "Running development or test EC2 instance has no reviewed schedule tag",
+      "risk_detail": "cost, sustainability, operations",
+      "severity": "low",
+      "detector": "ec2_dev_schedule_missing",
+      "remediation": {
+        "summary": "Define an owner-approved start and stop schedule in IaC or automation.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "environment_values": [
+          "dev",
+          "development",
+          "test",
+          "staging"
+        ],
+        "schedule_tag_keys": [
+          "schedule",
+          "bluearch:schedule",
+          "instance-schedule"
+        ]
+      },
+      "catalog_service": "ec2",
+      "capabilities": [
+        "ec2.describe_instances"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "cost_optimization",
+        "sustainability",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "9b4bd9b6-9139-4e8d-a157-055bbb6bacc3",
+      "short_id": "ec2-ebs-delete-on-termination-disabled",
+      "service": "ec2",
+      "scenario": "EC2 root EBS volume is retained after instance termination",
+      "risk_detail": "cost, operations",
+      "severity": "low",
+      "detector": "ec2_ebs_delete_on_termination_disabled",
+      "remediation": {
+        "summary": "Review retention requirements before enabling delete-on-termination.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "ebs",
+      "capabilities": [
+        "ec2.describe_instances"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "cost_optimization",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "249dd667-4b1e-4200-bec5-19c6c718f958",
+      "short_id": "ec2-ebs-volume-unencrypted",
+      "service": "ec2",
+      "scenario": "EBS volume is not encrypted at rest",
+      "risk_detail": "security",
+      "severity": "low",
+      "detector": "ec2_ebs_volume_unencrypted",
+      "remediation": {
+        "summary": "Replace the volume through a reviewed encrypted snapshot workflow.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "ec2",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "0f5cfb3e-623b-4140-a5ed-db4b5be406f8",
+      "short_id": "ec2-gp2-volume-candidate",
+      "service": "ec2",
+      "scenario": "EBS gp2 volume is a candidate for a reviewed gp3 migration",
+      "risk_detail": "cost, performance",
+      "severity": "medium",
+      "detector": "ec2_gp2_volume_candidate",
+      "remediation": {
+        "summary": "Compare workload IOPS and throughput before planning a gp3 migration.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "ec2",
+      "capabilities": [
+        "ec2.describe_volumes"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "cost_optimization",
+        "performance"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "f15adfc7-d970-4925-b0fb-99dbe1796d3b",
+      "short_id": "ec2-high-cpu",
+      "service": "ec2",
+      "scenario": "Running EC2 instance has maximum CPU above 90 percent for four or more days",
+      "risk_detail": "performance, reliability, operations",
+      "severity": "low",
+      "detector": "ec2_high_cpu",
+      "remediation": {
+        "summary": "Investigate workload, scaling, and code bottlenecks before changing capacity.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 14,
+        "minimum_breach_days": 4,
+        "minimum_daily_cpu_percent": 90.0
+      },
+      "catalog_service": "ec2",
+      "capabilities": [
+        "ec2.describe_instances",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "performance",
+        "reliability",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "74492e33-2626-4630-bf53-2bd5ef074061",
+      "short_id": "ec2-idle-instance",
+      "service": "ec2",
+      "scenario": "Running EC2 instance has sustained low CPU and network activity",
+      "risk_detail": "cost",
+      "severity": "medium",
+      "detector": "ec2_idle_instance",
+      "remediation": {
+        "summary": "Validate dependencies before rightsizing, scheduling, stopping, or terminating the instance.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 14,
+        "minimum_idle_days": 4,
+        "maximum_daily_cpu_percent": 5.0,
+        "maximum_daily_network_bytes": 5242880
+      },
+      "catalog_service": "ec2",
+      "capabilities": [
+        "ec2.describe_instances",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "fb608bb0-abfd-4543-876d-b7d44bc64329",
+      "short_id": "ec2-low-cpu-rightsizing",
+      "service": "ec2",
+      "scenario": "Running EC2 instance has average CPU below 10 percent for 14 complete days",
+      "risk_detail": "cost, sustainability",
+      "severity": "low",
+      "detector": "ec2_low_cpu_rightsizing",
+      "remediation": {
+        "summary": "Review workload peaks and dependencies before rightsizing the instance.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 14,
+        "maximum_average_cpu_percent": 10.0
+      },
+      "catalog_service": "ec2",
+      "capabilities": [
+        "ec2.describe_instances",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization",
+        "sustainability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "030f361e-eb21-4382-8d26-fcd86f47c8d5",
+      "short_id": "ec2-previous-generation-instance",
+      "service": "ec2",
+      "scenario": "Running EC2 instance uses a previous-generation instance family",
+      "risk_detail": "cost, performance, operations",
+      "severity": "medium",
+      "detector": "ec2_previous_generation_instance",
+      "remediation": {
+        "summary": "Benchmark a current-generation replacement and update IaC through a reviewed rollout.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "previous_generation_families": [
+          "c1",
+          "c3",
+          "cc2",
+          "cg1",
+          "cr1",
+          "g2",
+          "hi1",
+          "hs1",
+          "i2",
+          "m1",
+          "m2",
+          "m3",
+          "r3",
+          "t1"
+        ]
+      },
+      "catalog_service": "ec2",
+      "capabilities": [
+        "ec2.describe_instances"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "cost_optimization",
+        "performance",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "64036652-ec42-41db-a7d6-32819a169fe5",
+      "short_id": "ec2-security-group-rdp-open",
+      "service": "ec2",
+      "scenario": "Security group exposes RDP to the public internet",
+      "risk_detail": "security",
+      "severity": "medium",
+      "detector": "ec2_security_group_rdp_open",
+      "remediation": {
+        "summary": "Restrict RDP ingress to reviewed trusted networks or managed access.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "port": 3389
+      },
+      "catalog_service": "networking",
+      "capabilities": [
+        "ec2.describe_security_groups"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "63b4f412-c3ab-4ec8-af7f-ddfecbc25269",
+      "short_id": "ec2-security-group-rule-count-high",
+      "service": "ec2",
+      "scenario": "EC2 VPC security group has more than 50 ingress and egress rules",
+      "risk_detail": "security",
+      "severity": "medium",
+      "detector": "ec2_security_group_rule_count_high",
+      "remediation": {
+        "summary": "Review and consolidate redundant security-group rules.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "maximum_security_group_rules": 50
+      },
+      "catalog_service": "ec2",
+      "capabilities": [
+        "ec2.describe_security_groups"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "performance",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "bfea29bc-2ef9-4c6e-9ce3-d0c5823e3447",
+      "short_id": "ec2-security-group-ssh-open",
+      "service": "ec2",
+      "scenario": "Security group exposes SSH to the public internet",
+      "risk_detail": "security",
+      "severity": "medium",
+      "detector": "ec2_security_group_ssh_open",
+      "remediation": {
+        "summary": "Restrict SSH ingress to reviewed trusted networks or Session Manager.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "port": 22
+      },
+      "catalog_service": "networking",
+      "capabilities": [
+        "ec2.describe_security_groups"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "40d46878-ac12-44c8-902f-196a18dc9f6c",
+      "short_id": "ec2-unassociated-elastic-ip",
+      "service": "ec2",
+      "scenario": "Elastic IP address is not associated with a running EC2 instance",
+      "risk_detail": "cost",
+      "severity": "low",
+      "detector": "ec2_unassociated_elastic_ip",
+      "remediation": {
+        "summary": "Associate the address with an active resource or release it after dependency review.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "ec2",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "033ae438-4620-4f65-80cd-776fd0102bb0",
+      "short_id": "ec2-unattached-ebs-volume",
+      "service": "ec2",
+      "scenario": "Unattached EBS volume continues to incur storage charges",
+      "risk_detail": "cost",
+      "severity": "low",
+      "detector": "ec2_unattached_ebs_volume",
+      "remediation": {
+        "summary": "Review, snapshot if required, and delete the unused EBS volume.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "minimum_unattached_days": 7,
+        "pricing_region": "us-east-1",
+        "default_storage_cost_usd_per_gib_month": 0.1,
+        "storage_cost_usd_per_gib_month": {
+          "gp3": 0.08,
+          "gp2": 0.1,
+          "io1": 0.125,
+          "io2": 0.125,
+          "st1": 0.045,
+          "sc1": 0.015,
+          "standard": 0.05
+        },
+        "exempt_tags": {
+          "bluearch:steward-exempt": "true"
+        }
+      },
+      "catalog_service": "ec2",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "a2e6377a-b62c-47a6-b957-452e9b79883b",
+      "short_id": "ec2-unused-security-group",
+      "service": "ec2",
+      "scenario": "Non-default EC2 security group is not attached to any network interface",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "ec2_unused_security_group",
+      "remediation": {
+        "summary": "Confirm ownership and IaC references before deleting the unused security group.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [
+        "ec2.describe_security_groups",
+        "ec2.describe_network_interfaces"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "15ed0da6-a382-4fe0-969b-e0c4f66425bd",
+      "short_id": "vpc-flow-logs-disabled",
+      "service": "ec2",
+      "scenario": "VPC has no active flow log",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "vpc_flow_logs_disabled",
+      "remediation": {
+        "summary": "Create a reviewed VPC flow log destination and retention policy.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "networking",
+      "capabilities": [
+        "ec2.describe_vpcs",
+        "ec2.describe_flow_logs"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "4305d944-eb3c-473c-b9ce-99fe6911713b",
+      "short_id": "ecs-inactive-task-definition",
+      "service": "ecs",
+      "scenario": "Inactive ECS task definition remains registered",
+      "risk_detail": "operations",
+      "severity": "low",
+      "detector": "ecs_inactive_task_definition",
+      "remediation": {
+        "summary": "Confirm no service, rollback, or deployment references the revision before deregistration.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "ecs",
+      "capabilities": [
+        "ecs.list_task_definitions",
+        "ecs.describe_task_definition"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "326eaec8-4b35-417d-b883-33c31948a9cd",
+      "short_id": "ecs-platform-version-outdated",
+      "service": "ecs",
+      "scenario": "ECS Fargate service is pinned to a platform version instead of LATEST",
+      "risk_detail": "operations",
+      "severity": "low",
+      "detector": "ecs_platform_version_outdated",
+      "remediation": {
+        "summary": "Deploy a reviewed service update using the current Fargate platform.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "ecs",
+      "capabilities": [
+        "ecs.list_clusters",
+        "ecs.list_services",
+        "ecs.describe_services"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "57fdeba4-4823-4bd7-957f-5cb8b0d9f84e",
+      "short_id": "ecs-service-health-degraded",
+      "service": "ecs",
+      "scenario": "ECS service has fewer running tasks than its desired count",
+      "risk_detail": "reliability, operations",
+      "severity": "high",
+      "detector": "ecs_service_health_degraded",
+      "remediation": {
+        "summary": "Inspect deployments, events, task exits, capacity, and health checks before changing desired count.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "ecs",
+      "capabilities": [
+        "ecs.list_clusters",
+        "ecs.list_services",
+        "ecs.describe_services"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "reliability",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "b792ba90-f7d5-4324-938d-3213142d9d01",
+      "short_id": "ecs-unsafe-task-definition",
+      "service": "ecs",
+      "scenario": "ECS task definition uses privileged containers or literal secret-like environment variables",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "ecs_unsafe_task_definition",
+      "remediation": {
+        "summary": "Create a reviewed task-definition revision using non-privileged containers and secret references.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "ecs",
+      "capabilities": [
+        "ecs.list_task_definitions",
+        "ecs.describe_task_definition"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "4e33a295-b0c0-4cb5-a8ac-942a08de57b3",
+      "short_id": "efs-customer-kms-key-missing",
+      "service": "efs",
+      "scenario": "EFS file system explicitly requiring a customer-managed KMS key does not use one",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "efs_customer_kms_key_missing",
+      "remediation": {
+        "summary": "Migrate to an encrypted EFS file system using a reviewed customer-managed KMS key.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "requirement_tags": {
+          "bluearch:customer-kms-required": "true"
+        }
+      },
+      "catalog_service": "efs",
+      "capabilities": [
+        "efs.describe_file_systems"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "74b0f0d7-fcb8-46ed-beb4-3d3ec6ecbe64",
+      "short_id": "efs-encryption-disabled",
+      "service": "efs",
+      "scenario": "EFS file system is not encrypted at rest",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "efs_encryption_disabled",
+      "remediation": {
+        "summary": "Migrate data to a reviewed encrypted EFS file system.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "efs",
+      "capabilities": [
+        "efs.describe_file_systems"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "d5001001-ef01-4001-b001-001000000001",
+      "short_id": "efs-inactive-unmounted",
+      "service": "efs",
+      "scenario": "EFS file system has no mount targets and no client activity for 30 complete days",
+      "risk_detail": "cost, operations",
+      "severity": "low",
+      "detector": "efs_inactive_unmounted",
+      "remediation": {
+        "summary": "Confirm ownership and backups before deleting or archiving the file system.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 30
+      },
+      "catalog_service": "efs",
+      "capabilities": [
+        "efs.describe_file_systems",
+        "efs.describe_mount_targets",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "d5001002-ef02-4002-b002-002000000002",
+      "short_id": "efs-lifecycle-policy-missing",
+      "service": "efs",
+      "scenario": "EFS file system has no transition to an infrequent-access storage class",
+      "risk_detail": "cost",
+      "severity": "low",
+      "detector": "efs_lifecycle_policy_missing",
+      "remediation": {
+        "summary": "Review access patterns before enabling an EFS lifecycle transition.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "efs",
+      "capabilities": [
+        "efs.describe_file_systems",
+        "efs.describe_lifecycle_configuration"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "cost_optimization"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "d5001004-ef04-4004-b004-004000000004",
+      "short_id": "efs-throughput-overprovisioned",
+      "service": "efs",
+      "scenario": "Provisioned EFS throughput averages below 20 percent utilization for seven complete days",
+      "risk_detail": "cost, sustainability",
+      "severity": "low",
+      "detector": "efs_throughput_overprovisioned",
+      "remediation": {
+        "summary": "Review peak throughput and workload guarantees before changing throughput mode.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "maximum_utilization_percent": 20.0
+      },
+      "catalog_service": "efs",
+      "capabilities": [
+        "efs.describe_file_systems",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization",
+        "sustainability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "8c0a3d78-a5e3-4ac1-a1ca-f25306b46143",
+      "short_id": "iam-access-key-older-than-90-days",
+      "service": "iam",
+      "scenario": "Active IAM access key is older than the approved rotation window",
+      "risk_detail": "operations",
+      "severity": "high",
+      "detector": "iam_access_key_older_than_90_days",
+      "remediation": {
+        "summary": "Replace dependent usage before deactivating and removing the old key.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "maximum_access_key_age_days": 90
+      },
+      "catalog_service": "iam",
+      "capabilities": [
+        "iam.get_account_authorization_details",
+        "iam.list_access_keys"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "e3e22326-af1e-4fc5-89e6-757cf12a2f4a",
+      "short_id": "iam-console-user-mfa-disabled",
+      "service": "iam",
+      "scenario": "IAM user with console access has no MFA device",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "iam_console_user_mfa_disabled",
+      "remediation": {
+        "summary": "Register MFA for each IAM user that retains console access.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [
+        "iam.get_account_authorization_details",
+        "iam.get_login_profile",
+        "iam.list_mfa_devices"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "aead0be5-3b3f-4e96-b561-6bafc7162801",
+      "short_id": "iam-password-policy-missing",
+      "service": "iam",
+      "scenario": "IAM password policy is missing for an account with console users",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "iam_password_policy_missing",
+      "remediation": {
+        "summary": "Define a reviewed IAM account password policy.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [
+        "iam.get_account_password_policy",
+        "iam.get_account_authorization_details",
+        "iam.get_login_profile"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "f2ee54dd-37e7-4118-80f9-f164d89f3a8f",
+      "short_id": "iam-password-policy-number-missing",
+      "service": "iam",
+      "scenario": "IAM account password policy does not require at least one number",
+      "risk_detail": "security",
+      "severity": "medium",
+      "detector": "iam_password_policy_number_missing",
+      "remediation": {
+        "summary": "Update the reviewed account password policy to require numbers.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [
+        "iam.get_account_password_policy"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "6a285348-b16e-4905-b347-09df596d02d5",
+      "short_id": "iam-policy-attached-directly-to-user",
+      "service": "iam",
+      "scenario": "IAM managed or inline policy is attached directly to a user",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "iam_policy_attached_directly_to_user",
+      "remediation": {
+        "summary": "Move permissions to a reviewed group or role before detaching user policies.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [
+        "iam.get_account_authorization_details"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "20da6654-9c4a-4b02-aaaf-5327efab6599",
+      "short_id": "iam-policy-full-admin",
+      "service": "iam",
+      "scenario": "IAM policy grants unrestricted Allow * on Resource *",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "iam_policy_full_admin",
+      "remediation": {
+        "summary": "Replace unrestricted administration with reviewed least-privilege permissions.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [
+        "iam.get_account_authorization_details",
+        "iam.get_policy",
+        "iam.get_policy_version"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "718ac930-9ba0-42a1-a31b-fad73f2a66da",
+      "short_id": "iam-role-wildcard-trust",
+      "service": "iam",
+      "scenario": "IAM role trust policy allows an unconditional wildcard AWS principal",
+      "risk_detail": "security",
+      "severity": "medium",
+      "detector": "iam_role_wildcard_trust",
+      "remediation": {
+        "summary": "Replace wildcard trust with reviewed principals and organization or external-ID conditions.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [
+        "iam.get_account_authorization_details"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "e53ff93a-a43d-4580-bf17-a915dfeba8ce",
+      "short_id": "iam-root-access-key-present",
+      "service": "iam",
+      "scenario": "AWS account root user has an active access key",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "iam_root_access_key_present",
+      "remediation": {
+        "summary": "Replace root access-key usage and remove the root access key.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "a843c50e-63a8-4e20-8ef8-c7f6ec4a4500",
+      "short_id": "iam-root-hardware-mfa-missing",
+      "service": "iam",
+      "scenario": "AWS root user does not have MFA enabled and therefore has no hardware MFA protection",
+      "risk_detail": "security",
+      "severity": "medium",
+      "detector": "iam_root_hardware_mfa_missing",
+      "remediation": {
+        "summary": "Register a phishing-resistant hardware MFA device for the root user.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [
+        "iam.get_account_summary"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "314f0d94-7381-454d-915d-45b962d801e3",
+      "short_id": "iam-root-mfa-disabled",
+      "service": "iam",
+      "scenario": "AWS account root user does not have MFA enabled",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "iam_root_mfa_disabled",
+      "remediation": {
+        "summary": "Register and protect an MFA device for the root user.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "07f63c10-f164-4f31-95fb-57c07eb87261",
+      "short_id": "iam-support-role-missing",
+      "service": "iam",
+      "scenario": "AWS account has no role with the AWSSupportAccess managed policy",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "iam_support_role_missing",
+      "remediation": {
+        "summary": "Create a reviewed incident-support role with controlled trust and AWSSupportAccess.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "iam",
+      "capabilities": [
+        "iam.get_account_authorization_details"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "e2a5568c-90b0-4153-877d-246efb62ffad",
+      "short_id": "kms-key-rotation-disabled",
+      "service": "kms",
+      "scenario": "Customer-managed symmetric KMS key has automatic key rotation disabled",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "kms_key_rotation_disabled",
+      "remediation": {
+        "summary": "Review key consumers and the rotation period before enabling automatic rotation.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "kms",
+      "capabilities": [
+        "kms.list_keys",
+        "kms.describe_key",
+        "kms.get_key_rotation_status",
+        "kms.list_resource_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "5539e36a-7ff0-4feb-9edf-02a6a51ebd51",
+      "short_id": "lambda-admin-execution-role",
+      "service": "lambda",
+      "scenario": "Lambda execution role has an unrestricted administrator policy",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "lambda_admin_execution_role",
+      "remediation": {
+        "summary": "Replace administrator permissions with the function's reviewed minimum actions.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "lambda",
+      "capabilities": [
+        "lambda.list_functions",
+        "lambda.list_tags",
+        "iam.list_attached_role_policies",
+        "iam.list_role_policies",
+        "iam.get_role_policy",
+        "iam.get_policy",
+        "iam.get_policy_version"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "1f780989-b697-4817-b38c-dee807324c6b",
+      "short_id": "lambda-duration-near-timeout",
+      "service": "lambda",
+      "scenario": "Lambda maximum duration exceeds 80 percent of configured timeout for three or more days",
+      "risk_detail": "performance, reliability",
+      "severity": "medium",
+      "detector": "lambda_duration_near_timeout",
+      "remediation": {
+        "summary": "Profile code and downstream calls before changing memory, timeout, or architecture.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "minimum_breach_days": 3,
+        "minimum_timeout_utilization_percent": 80.0
+      },
+      "catalog_service": "lambda",
+      "capabilities": [
+        "lambda.list_functions",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "performance",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "59b90e10-df31-4a2e-9cd7-1a598eecb2a1",
+      "short_id": "lambda-high-error-rate",
+      "service": "lambda",
+      "scenario": "Lambda function has a daily error rate above 10 percent in the last seven days",
+      "risk_detail": "reliability, operations, cost",
+      "severity": "medium",
+      "detector": "lambda_high_error_rate",
+      "remediation": {
+        "summary": "Inspect logs, traces, recent deployments, and upstream dependencies before changing code or retry behavior.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "maximum_error_rate_percent": 10.0
+      },
+      "catalog_service": "lambda",
+      "capabilities": [
+        "lambda.list_functions",
+        "lambda.list_tags",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "reliability",
+        "operations",
+        "cost_optimization"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "f11f43fb-072f-4a2a-9a4a-2851f8bae0aa",
+      "short_id": "lambda-memory-pressure",
+      "service": "lambda",
+      "scenario": "Lambda Insights reports memory utilization above 90 percent for seven complete days",
+      "risk_detail": "performance, reliability",
+      "severity": "medium",
+      "detector": "lambda_memory_pressure",
+      "remediation": {
+        "summary": "Inspect allocation and code memory behavior before increasing function memory.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "minimum_memory_utilization_percent": 90.0
+      },
+      "catalog_service": "lambda",
+      "capabilities": [
+        "lambda.list_functions",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "performance",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "44183041-c87c-4bf2-ab10-3a593057135a",
+      "short_id": "lambda-memory-underutilized",
+      "service": "lambda",
+      "scenario": "Lambda Insights reports memory utilization below 30 percent for seven complete days",
+      "risk_detail": "cost, sustainability",
+      "severity": "medium",
+      "detector": "lambda_memory_underutilized",
+      "remediation": {
+        "summary": "Benchmark lower memory settings before changing the function deployment configuration.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "maximum_memory_utilization_percent": 30.0
+      },
+      "catalog_service": "lambda",
+      "capabilities": [
+        "lambda.list_functions",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization",
+        "sustainability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "b2c8d3e9-4f1a-5b6c-9d7e-1a8f4b5c6d7e",
+      "short_id": "lambda-provisioned-concurrency-underused",
+      "service": "lambda",
+      "scenario": "Lambda function has provisioned concurrency but fewer than ten invocations per day",
+      "risk_detail": "cost",
+      "severity": "low",
+      "detector": "lambda_provisioned_concurrency_underused",
+      "remediation": {
+        "summary": "Validate latency requirements before reducing or scheduling provisioned concurrency.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "maximum_daily_invocations": 10.0
+      },
+      "catalog_service": "lambda",
+      "capabilities": [
+        "lambda.list_functions",
+        "lambda.list_provisioned_concurrency_configs",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "24a0eea7-9e43-4549-9c5d-17d1ddcaa4ef",
+      "short_id": "lambda-shared-execution-role",
+      "service": "lambda",
+      "scenario": "Multiple Lambda functions share the same IAM execution role",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "lambda_shared_execution_role",
+      "remediation": {
+        "summary": "Create least-privilege function-specific roles through the owning IaC project.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "lambda",
+      "capabilities": [
+        "lambda.list_functions"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "c8fd0f3c-90c1-45ec-9467-963920497527",
+      "short_id": "lambda-throttling-detected",
+      "service": "lambda",
+      "scenario": "Lambda function has one or more throttled invocations in the last seven days",
+      "risk_detail": "performance, reliability, operations",
+      "severity": "high",
+      "detector": "lambda_throttling_detected",
+      "remediation": {
+        "summary": "Inspect concurrency consumers and retry behavior before changing limits.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "minimum_throttles": 1.0
+      },
+      "catalog_service": "lambda",
+      "capabilities": [
+        "lambda.list_functions",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "performance",
+        "reliability",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "51e22636-4dae-4f77-ab58-c4f4961013a2",
+      "short_id": "lambda-timeout-rate-high",
+      "service": "lambda",
+      "scenario": "Lambda duration reaches at least 95 percent of configured timeout on more than 10 percent of observed days",
+      "risk_detail": "reliability, performance, cost",
+      "severity": "medium",
+      "detector": "lambda_timeout_rate_high",
+      "remediation": {
+        "summary": "Investigate code and dependencies before increasing timeout or retry behavior.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "minimum_timeout_utilization_percent": 95.0,
+        "minimum_breach_percentage": 10.0
+      },
+      "catalog_service": "lambda",
+      "capabilities": [
+        "lambda.list_functions",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "reliability",
+        "performance",
+        "cost_optimization"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "d814745d-a655-4612-9d03-07f7236cab77",
+      "short_id": "lambda-unused-function",
+      "service": "lambda",
+      "scenario": "Lambda function is older than 30 days and has no invocations in that period",
+      "risk_detail": "cost, operations",
+      "severity": "low",
+      "detector": "lambda_unused_function",
+      "remediation": {
+        "summary": "Confirm triggers and ownership before deleting or archiving the function.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 30,
+        "minimum_function_age_days": 30
+      },
+      "catalog_service": "lambda",
+      "capabilities": [
+        "lambda.list_functions",
+        "lambda.list_tags",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "2cd8897d-8db5-4bde-8476-1edbe7f97894",
+      "short_id": "lambda-xray-tracing-disabled",
+      "service": "lambda",
+      "scenario": "Lambda function does not have active AWS X-Ray tracing",
+      "risk_detail": "operations",
+      "severity": "low",
+      "detector": "lambda_xray_tracing_disabled",
+      "remediation": {
+        "summary": "Enable active tracing after reviewing trace volume, permissions, and cost.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "lambda",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "b3c7e2d1-8a4f-4b6e-9c5d-7e1a8f3b2c4d",
+      "short_id": "rds-gp2-storage",
+      "service": "rds",
+      "scenario": "RDS instance uses GP2 storage instead of GP3",
+      "risk_detail": "cost, performance",
+      "severity": "low",
+      "detector": "rds_gp2_storage",
+      "remediation": {
+        "summary": "Evaluate a GP3 storage migration using workload IOPS and throughput requirements.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "cost_evidence_required": true
+      },
+      "catalog_service": "rds",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "b0c84bfb-87ed-4bc0-8cd5-76289fc81aa1",
+      "short_id": "rds-high-cpu",
+      "service": "rds",
+      "scenario": "RDS instance has maximum CPU above 90 percent for three or more days",
+      "risk_detail": "performance, reliability",
+      "severity": "medium",
+      "detector": "rds_high_cpu",
+      "remediation": {
+        "summary": "Inspect query load, locks, memory, storage, and scaling options before changing capacity.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "minimum_breach_days": 3,
+        "minimum_daily_cpu_percent": 90.0
+      },
+      "catalog_service": "rds",
+      "capabilities": [
+        "rds.describe_db_instances",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "performance",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "3afeb36c-4c09-400f-8f70-13314ff8d578",
+      "short_id": "rds-idle-instance",
+      "service": "rds",
+      "scenario": "Available RDS instance has no database connections for seven days",
+      "risk_detail": "cost",
+      "severity": "high",
+      "detector": "rds_idle_instance",
+      "remediation": {
+        "summary": "Validate application and retention dependencies before stopping or deleting the database.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "maximum_connections": 0.0
+      },
+      "catalog_service": "rds",
+      "capabilities": [
+        "rds.describe_db_instances",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "d5daba29-69b4-4a46-8223-73ece5a7b5ef",
+      "short_id": "rds-low-cpu-rightsizing",
+      "service": "rds",
+      "scenario": "RDS instance has average CPU below 10 percent for seven complete days",
+      "risk_detail": "cost, sustainability",
+      "severity": "medium",
+      "detector": "rds_low_cpu_rightsizing",
+      "remediation": {
+        "summary": "Review connections, memory, storage, and peaks before rightsizing the DB instance.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "maximum_average_cpu_percent": 10.0
+      },
+      "catalog_service": "rds",
+      "capabilities": [
+        "rds.describe_db_instances",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization",
+        "sustainability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "67c7713f-5866-4e0e-bd65-2fd445775878",
+      "short_id": "rds-multi-az-disabled",
+      "service": "rds",
+      "scenario": "RDS instance does not use Multi-AZ deployment for failover",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "rds_multi_az_disabled",
+      "remediation": {
+        "summary": "Evaluate and enable Multi-AZ for workloads requiring database failover.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "rds",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "a1f5645b-0bce-475a-b036-d34b9abd5dbb",
+      "short_id": "rds-previous-generation-instance",
+      "service": "rds",
+      "scenario": "RDS instance uses a previous-generation DB instance class",
+      "risk_detail": "cost, performance, operations",
+      "severity": "medium",
+      "detector": "rds_previous_generation_instance",
+      "remediation": {
+        "summary": "Benchmark a current-generation class and migrate through a reviewed maintenance plan.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "previous_generation_families": [
+          "db.m1",
+          "db.m2",
+          "db.m3",
+          "db.r3",
+          "db.t1"
+        ]
+      },
+      "catalog_service": "rds",
+      "capabilities": [
+        "rds.describe_db_instances"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "cost_optimization",
+        "performance",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "c0764b9f-5241-46c5-af3f-3bcf30721fec",
+      "short_id": "rds-publicly-accessible",
+      "service": "rds",
+      "scenario": "RDS instance has a public network interface",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "rds_publicly_accessible",
+      "remediation": {
+        "summary": "Move the database to private connectivity after validating application access.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "rds",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "daff4201-ab90-42a9-a503-17ec9374a89e",
+      "short_id": "rds-read-heavy-no-replica",
+      "service": "rds",
+      "scenario": "Read-heavy RDS source instance has no read replica",
+      "risk_detail": "performance, reliability",
+      "severity": "medium",
+      "detector": "rds_read_heavy_no_replica",
+      "remediation": {
+        "summary": "Validate consistency and failover requirements before adding a read replica or cache.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 7,
+        "minimum_daily_read_iops": 100.0,
+        "maximum_daily_write_iops": 20.0
+      },
+      "catalog_service": "rds",
+      "capabilities": [
+        "rds.describe_db_instances",
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "performance",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "a4d8f3e1-9c2b-4f7e-8a5d-6b1c9e3f2a4d",
+      "short_id": "rds-storage-autoscaling-disabled",
+      "service": "rds",
+      "scenario": "RDS instance does not configure a maximum storage autoscaling threshold",
+      "risk_detail": "reliability, cost",
+      "severity": "low",
+      "detector": "rds_storage_autoscaling_disabled",
+      "remediation": {
+        "summary": "Set a reviewed maximum storage threshold after validating engine and growth limits.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "rds",
+      "capabilities": [
+        "rds.describe_db_instances"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "reliability",
+        "cost_optimization"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "4a77b3fb-647d-4f79-8605-28d7ab946ad2",
+      "short_id": "rds-storage-unencrypted",
+      "service": "rds",
+      "scenario": "RDS storage encryption is disabled",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "rds_storage_unencrypted",
+      "remediation": {
+        "summary": "Migrate the database to encrypted storage using a reviewed snapshot workflow.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "rds",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "5449c935-aa36-4885-86e0-fee05a533361",
+      "short_id": "s3-cloudtrail-access-logging-disabled",
+      "service": "s3",
+      "scenario": "S3 bucket receiving CloudTrail logs does not have server access logging enabled",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "s3_cloudtrail_access_logging_disabled",
+      "remediation": {
+        "summary": "Enable access logging to a separate reviewed destination bucket.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "s3",
+      "capabilities": [
+        "s3.list_buckets",
+        "s3.get_bucket_policy",
+        "s3.get_bucket_logging"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "ffc337be-4cb6-4899-b02c-d447af23221e",
+      "short_id": "s3-intelligent-tiering-missing",
+      "service": "s3",
+      "scenario": "S3 bucket lifecycle rules do not transition or expire aging data",
+      "risk_detail": "cost, operations, sustainability",
+      "severity": "low",
+      "detector": "s3_storage_tiering_missing",
+      "remediation": {
+        "summary": "Add a reviewed lifecycle transition, expiration, or Intelligent-Tiering policy.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "requires_existing_lifecycle_configuration": true,
+        "accepted_transition_storage_classes": [
+          "STANDARD_IA",
+          "ONEZONE_IA",
+          "INTELLIGENT_TIERING",
+          "GLACIER",
+          "DEEP_ARCHIVE",
+          "GLACIER_IR"
+        ]
+      },
+      "catalog_service": "s3",
+      "capabilities": [
+        "s3.list_buckets",
+        "s3.get_bucket_lifecycle_configuration"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "cost_optimization",
+        "sustainability",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "83c3686a-7b31-478e-b388-453384ad53ba",
+      "short_id": "s3-kms-encryption-required",
+      "service": "s3",
+      "scenario": "S3 bucket explicitly requiring KMS encryption uses no aws:kms default encryption rule",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "s3_kms_encryption_required",
+      "remediation": {
+        "summary": "Configure a reviewed KMS key and bucket default encryption after validating key-policy access.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "requirement_tags": {
+          "bluearch:kms-required": "true"
+        }
+      },
+      "catalog_service": "s3",
+      "capabilities": [
+        "s3.list_buckets",
+        "s3.get_bucket_tagging",
+        "s3.get_bucket_encryption"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "a97bfdeb-87c8-4550-a146-e926be7e6ecf",
+      "short_id": "s3-mfa-delete-disabled",
+      "service": "s3",
+      "scenario": "Versioned S3 bucket does not have MFA Delete enabled",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "s3_mfa_delete_disabled",
+      "remediation": {
+        "summary": "Review root-account operational requirements before enabling MFA Delete.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "s3",
+      "capabilities": [
+        "s3.list_buckets",
+        "s3.get_bucket_versioning",
+        "s3.get_bucket_tagging"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "03736e4a-6ce5-4375-84ce-278711247314",
+      "short_id": "s3-no-default-encryption",
+      "service": "s3",
+      "scenario": "S3 object or bucket data is not encrypted",
+      "risk_detail": "security",
+      "severity": "medium",
+      "detector": "s3_missing_default_encryption",
+      "remediation": {
+        "summary": "Enable default SSE-S3 bucket encryption.",
+        "safety_level": "low_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "s3",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "e9b21a0d-2fe8-4f5b-8875-52995b4cf2e7",
+      "short_id": "s3-no-lifecycle",
+      "service": "s3",
+      "scenario": "S3 lifecycle manager is turned off",
+      "risk_detail": "cost, operations",
+      "severity": "medium",
+      "detector": "s3_missing_lifecycle",
+      "remediation": {
+        "summary": "Add a lifecycle rule for older objects.",
+        "safety_level": "low_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "cost_evidence_required": true,
+        "advisory_without_cost_evidence": true
+      },
+      "catalog_service": "s3",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "73c98951-d7a6-4858-b14a-e209b16bb222",
+      "short_id": "s3-object-lock-required",
+      "service": "s3",
+      "scenario": "S3 bucket explicitly classified for WORM retention does not have Object Lock enabled",
+      "risk_detail": "security, reliability, operations",
+      "severity": "medium",
+      "detector": "s3_object_lock_required",
+      "remediation": {
+        "summary": "Create a reviewed Object Lock configuration and retention policy before storing regulated data.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "requirement_tags": {
+          "bluearch:object-lock-required": "true"
+        }
+      },
+      "catalog_service": "s3",
+      "capabilities": [
+        "s3.list_buckets",
+        "s3.get_bucket_tagging",
+        "s3.get_object_lock_configuration"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "reliability",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "06aabba0-436b-4295-91b1-165ee4741dc8",
+      "short_id": "s3-policy-all-actions-public",
+      "service": "s3",
+      "scenario": "S3 bucket policy allows all actions to a public principal",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "s3_policy_all_actions_public",
+      "remediation": {
+        "summary": "Remove or narrowly scope public wildcard actions in the bucket policy.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "s3",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "743e9f6e-7cda-4e47-bbbb-10e47c728456",
+      "short_id": "s3-policy-public-delete",
+      "service": "s3",
+      "scenario": "S3 bucket policy allows delete actions to a public principal",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "s3_policy_public_delete",
+      "remediation": {
+        "summary": "Remove public delete permissions from the bucket policy.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "s3",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "356570fe-de33-4782-bc81-152cb144fb05",
+      "short_id": "s3-public-bucket",
+      "service": "s3",
+      "scenario": "Public S3 bucket or contents",
+      "risk_detail": "security, operations",
+      "severity": "high",
+      "detector": "s3_public_bucket",
+      "remediation": {
+        "summary": "Enable S3 bucket public access block.",
+        "safety_level": "low_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "s3",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "b874846b-c586-47bf-a2fd-167ef2877f9f",
+      "short_id": "s3-replication-required",
+      "service": "s3",
+      "scenario": "S3 bucket explicitly classified for cross-Region availability has no replication configuration",
+      "risk_detail": "reliability, performance",
+      "severity": "medium",
+      "detector": "s3_replication_required",
+      "remediation": {
+        "summary": "Configure reviewed versioning, destination ownership, encryption, and replication rules.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "requirement_tags": {
+          "bluearch:replication-required": "true"
+        }
+      },
+      "catalog_service": "s3",
+      "capabilities": [
+        "s3.list_buckets",
+        "s3.get_bucket_tagging",
+        "s3.get_bucket_replication"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "reliability",
+        "performance"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "fa44e6cf-5243-4819-8256-2379e5347eff",
+      "short_id": "s3-server-access-logging-disabled",
+      "service": "s3",
+      "scenario": "S3 bucket does not deliver server access logs",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "s3_server_access_logging_disabled",
+      "remediation": {
+        "summary": "Enable logging to an existing reviewed destination bucket and prefix.",
+        "safety_level": "low_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "s3",
+      "capabilities": [
+        "s3.list_buckets",
+        "s3.get_bucket_logging",
+        "s3.get_bucket_tagging"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "ce620d59-96ae-4465-b6cf-6262e9e5f403",
+      "short_id": "s3-tls-enforcement-missing",
+      "service": "s3",
+      "scenario": "S3 bucket policy does not deny requests that do not use TLS",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "s3_tls_enforcement_missing",
+      "remediation": {
+        "summary": "Add a reviewed bucket policy statement that denies non-TLS requests.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "s3",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "60c00aeb-ec1d-4b10-91fa-7025fd7a70be",
+      "short_id": "s3-versioning-disabled",
+      "service": "s3",
+      "scenario": "S3 versioning should support object recovery",
+      "risk_detail": "operations",
+      "severity": "medium",
+      "detector": "s3_versioning_disabled",
+      "remediation": {
+        "summary": "Enable bucket versioning.",
+        "safety_level": "low_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "s3",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
+      "id": "4961a508-8ee9-4568-8236-b63c6acb4207",
+      "short_id": "secrets-manager-rotation-disabled",
+      "service": "secrets-manager",
+      "scenario": "Active Secrets Manager secret does not have automatic rotation enabled",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "secrets_manager_rotation_disabled",
+      "remediation": {
+        "summary": "Define and test a service-specific rotation strategy before enabling rotation.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "secrets-manager",
+      "capabilities": [
+        "secretsmanager.list_secrets",
+        "secretsmanager.describe_secret"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "e3b3d09c-82b1-48b3-ad01-6205fd754e00",
+      "short_id": "sns-topic-encryption-disabled",
+      "service": "sns",
+      "scenario": "SNS topic does not use server-side encryption",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "sns_topic_encryption_disabled",
+      "remediation": {
+        "summary": "Enable SNS encryption with an AWS-managed or reviewed customer-managed KMS key.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "sns",
+      "capabilities": [
+        "sns.list_topics",
+        "sns.get_topic_attributes",
+        "sns.list_tags_for_resource"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "f90db437-325b-489b-9f05-6e813cb3524c",
+      "short_id": "sns-topic-public-access",
+      "service": "sns",
+      "scenario": "SNS topic policy grants public access without a restricting condition",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "sns_topic_public_access",
+      "remediation": {
+        "summary": "Replace public topic permissions with reviewed principals and source conditions.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "sns",
+      "capabilities": [
+        "sns.list_topics",
+        "sns.get_topic_attributes",
+        "sns.list_tags_for_resource"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "6c5fa948-aff9-4c05-ac0b-a1e3f532bcc4",
+      "short_id": "sqs-queue-encryption-disabled",
+      "service": "sqs",
+      "scenario": "SQS queue does not use server-side encryption",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "sqs_queue_encryption_disabled",
+      "remediation": {
+        "summary": "Enable SSE-SQS or a reviewed KMS key and verify queue integrations.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "sqs",
+      "capabilities": [
+        "sqs.list_queues",
+        "sqs.get_queue_attributes",
+        "sqs.list_queue_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "4f58c3ff-168e-4b6f-a628-ba279a021fe9",
+      "short_id": "sqs-queue-public-access",
+      "service": "sqs",
+      "scenario": "SQS queue policy grants public access without a restricting condition",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "sqs_queue_public_access",
+      "remediation": {
+        "summary": "Replace public queue permissions with reviewed principals and source conditions.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "sqs",
+      "capabilities": [
+        "sqs.list_queues",
+        "sqs.get_queue_attributes",
+        "sqs.list_queue_tags"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    }
+  ],
+  "sync": {
+    "services": [
+      "alb-elb",
+      "api-gateway",
+      "cloudtrail",
+      "cloudwatch",
+      "dynamodb",
+      "ebs",
+      "ec2",
+      "ecs",
+      "efs",
+      "iam",
+      "kms",
+      "lambda",
+      "networking",
+      "rds",
+      "s3",
+      "secrets-manager",
+      "sns",
+      "sqs"
+    ],
+    "imported_rules": 100,
+    "skipped_unsupported_rules": {
+      "alb-elb": 10,
+      "api-gateway": 1,
+      "cloudtrail": 1,
+      "cloudwatch": 2,
+      "dynamodb": 7,
+      "ebs": 6,
+      "ec2": 39,
+      "ecs": 2,
+      "efs": 3,
+      "iam": 6,
+      "kms": 1,
+      "lambda": 10,
+      "networking": 11,
+      "rds": 12,
+      "s3": 10,
+      "secrets-manager": 1,
+      "sns": 1,
+      "sqs": 1
+    }
+  }
+}

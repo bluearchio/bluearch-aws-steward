@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "bluearch-aws-steward": {
+      "command": "bluearch-steward-mcp",
+      "args": [],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "AWS_SDK_LOAD_CONFIG": "1"
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BlueArchStewardApprovedRemediation",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:UpdateTrail",
+        "elasticloadbalancing:ModifyLoadBalancerAttributes",
+        "logs:PutRetentionPolicy",
+        "s3:PutBucketLogging",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketVersioning",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

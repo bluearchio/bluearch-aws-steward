@@ -1,0 +1,35 @@
+{
+  "fixture_set": "aws-emulator-s3-baseline",
+  "expected_findings": [
+    {
+      "rule_id": "356570fe-de33-4782-bc81-152cb144fb05",
+      "fixture_id": "s3-public-bucket",
+      "resource": "s3://bluearch-steward-public",
+      "expected_status": "fail"
+    },
+    {
+      "rule_id": "03736e4a-6ce5-4375-84ce-278711247314",
+      "fixture_id": "s3-no-default-encryption",
+      "resource": "s3://bluearch-steward-unencrypted",
+      "expected_status": "fail"
+    },
+    {
+      "rule_id": "e9b21a0d-2fe8-4f5b-8875-52995b4cf2e7",
+      "fixture_id": "s3-no-lifecycle",
+      "resource": "s3://bluearch-steward-no-lifecycle",
+      "expected_status": "fail"
+    },
+    {
+      "rule_id": "60c00aeb-ec1d-4b10-91fa-7025fd7a70be",
+      "fixture_id": "s3-versioning-disabled",
+      "resource": "s3://bluearch-steward-versioning-disabled",
+      "expected_status": "fail"
+    }
+  ],
+  "expected_clean_resources": [
+    {
+      "resource": "s3://bluearch-steward-secure",
+      "expected_status": "pass"
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bluearch-aws-steward"
+dynamic = ["version"]
+description = "Agent-native AWS misconfiguration detection and remediation powered by BlueArch rules."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{ name = "BlueArch", email = "support@bluearch.io" }]
+dependencies = [
+    "boto3>=1.34,<2.0",
+    "reportlab>=4.2,<5.0",
+    "urllib3>=2.7,<3.0",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+]
+
+[project.optional-dependencies]
+tui = ["textual>=0.89,<1.0"]
+
+[dependency-groups]
+dev = [
+    "bandit[toml]>=1.8.6,<2",
+    "build>=1.2,<2",
+    "detect-secrets>=1.5,<2",
+    "mypy>=1.10,<2",
+    "pip-audit>=2.7,<3",
+    "ruff>=0.9,<1",
+    "twine>=5,<7",
+]
+
+[project.scripts]
+bluearch-steward = "bluearch_aws_steward.cli:main"
+bluearch-steward-mcp = "bluearch_aws_steward.mcp:main"
+
+[project.urls]
+Documentation = "https://github.com/bluearchio/bluearch-aws-steward#readme"
+Issues = "https://github.com/bluearchio/bluearch-aws-steward/issues"
+Source = "https://github.com/bluearchio/bluearch-aws-steward"
+
+[tool.setuptools.dynamic]
+version = { attr = "bluearch_aws_steward.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["bluearch_aws_steward", "bluearch_aws_steward.*"]
+
+[tool.setuptools.package-data]
+bluearch_aws_steward = ["catalog/*.json"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+extend-exclude = ["build", "dist", ".venv"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+show_error_codes = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+exclude = ["build/", "dist/", "tests/"]
+
+[tool.bandit]
+exclude_dirs = [".venv", "build", "dist", "tests"]
+skips = ["B404", "B603", "B607"]

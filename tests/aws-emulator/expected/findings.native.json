@@ -1,0 +1,658 @@
+{
+  "fixture_set": "aws-emulator-all-active-rules",
+  "expected_all_active_rules": true,
+  "allow_additional_findings": true,
+  "expected_summary": {
+    "detection_coverage.automated_rules_evaluated": 100,
+    "detection_coverage.complete_catalog_evaluation": true,
+    "rules_evaluated": 100,
+    "scan_errors": 0,
+    "services_requested": [
+      "iam",
+      "cloudtrail",
+      "cloudwatch",
+      "dynamodb",
+      "s3",
+      "ec2",
+      "rds",
+      "lambda",
+      "efs",
+      "ecs",
+      "alb",
+      "kms",
+      "secrets-manager",
+      "sns",
+      "sqs",
+      "api-gateway"
+    ],
+    "services_scanned": [
+      "iam",
+      "cloudtrail",
+      "cloudwatch",
+      "dynamodb",
+      "s3",
+      "ec2",
+      "rds",
+      "lambda",
+      "efs",
+      "ecs",
+      "alb",
+      "kms",
+      "secrets-manager",
+      "sns",
+      "sqs",
+      "api-gateway"
+    ]
+  },
+  "expected_summary_minimum": {
+    "findings": 100,
+    "resources_matched": 60
+  },
+  "expected_findings": [
+    {
+      "fixture_id": "alb-access-logging-disabled",
+      "rule_short_id": "alb-access-logging-disabled",
+      "resource": "alb://load-balancer/bluearch-steward-http",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "alb-certificate-expiring",
+      "rule_short_id": "alb-certificate-expiring",
+      "resource_pattern": "acm://certificate/[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "alb-https-listener-missing",
+      "rule_short_id": "alb-https-listener-missing",
+      "resource": "alb://load-balancer/bluearch-steward-http",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "alb-idle-load-balancer",
+      "rule_short_id": "alb-idle-load-balancer",
+      "resource": "alb://load-balancer/bluearch-steward-http",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "alb-unhealthy-targets",
+      "rule_short_id": "alb-unhealthy-targets",
+      "resource": "alb://target-group/bluearch-steward-http-tg",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "alb-weak-tls-policy",
+      "rule_short_id": "alb-weak-tls-policy",
+      "resource_pattern": "alb://listener/[a-z0-9]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "cloudtrail-cloudwatch-integration-missing",
+      "rule_short_id": "cloudtrail-cloudwatch-integration-missing",
+      "resource": "cloudtrail://trail/bluearch-steward-trail",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "cloudtrail-kms-encryption-disabled",
+      "rule_short_id": "cloudtrail-kms-encryption-disabled",
+      "resource": "cloudtrail://trail/bluearch-steward-trail",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "cloudtrail-log-validation-disabled",
+      "rule_short_id": "cloudtrail-log-validation-disabled",
+      "resource": "cloudtrail://trail/bluearch-steward-trail",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "cloudtrail-multi-region-logging-disabled",
+      "rule_short_id": "cloudtrail-multi-region-logging-disabled",
+      "resource": "cloudtrail://account/us-east-1",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "cloudwatch-log-retention-missing",
+      "rule_short_id": "cloudwatch-log-retention-missing",
+      "resource": "cloudwatch-logs://log-group/bluearch-steward-no-retention",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ebs-orphaned-snapshot-or-ami",
+      "rule_short_id": "ebs-orphaned-snapshot-or-ami",
+      "resource_pattern": "ebs://snapshot/snap-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-default-security-group-not-restricted",
+      "rule_short_id": "ec2-default-security-group-not-restricted",
+      "resource_pattern": "ec2://security-group/sg-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-ebs-delete-on-termination-disabled",
+      "rule_short_id": "ec2-ebs-delete-on-termination-disabled",
+      "resource_pattern": "ec2://instance/i-[a-z0-9-]+/volume/vol-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-ebs-volume-unencrypted",
+      "rule_short_id": "ec2-ebs-volume-unencrypted",
+      "resource_pattern": "ebs://vol-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-idle-instance",
+      "rule_short_id": "ec2-idle-instance",
+      "resource_pattern": "ec2://instance/i-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-security-group-rdp-open",
+      "rule_short_id": "ec2-security-group-rdp-open",
+      "resource_pattern": "ec2://security-group/sg-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-security-group-rule-count-high",
+      "rule_short_id": "ec2-security-group-rule-count-high",
+      "resource_pattern": "ec2://security-group/sg-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-security-group-ssh-open",
+      "rule_short_id": "ec2-security-group-ssh-open",
+      "resource_pattern": "ec2://security-group/sg-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-unassociated-elastic-ip",
+      "rule_short_id": "ec2-unassociated-elastic-ip",
+      "resource_pattern": "eip://eipalloc-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-unattached-ebs-volume",
+      "rule_short_id": "ec2-unattached-ebs-volume",
+      "resource_pattern": "ebs://vol-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "vpc-flow-logs-disabled",
+      "rule_short_id": "vpc-flow-logs-disabled",
+      "resource_pattern": "vpc://vpc-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ecs-platform-version-outdated",
+      "rule_short_id": "ecs-platform-version-outdated",
+      "resource": "ecs://service/bluearch-steward-outdated",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ecs-unsafe-task-definition",
+      "rule_short_id": "ecs-unsafe-task-definition",
+      "resource_pattern": "ecs://task-definition/bluearch-steward-unsafe:[0-9]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "efs-encryption-disabled",
+      "rule_short_id": "efs-encryption-disabled",
+      "resource_pattern": "efs://file-system/fs-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "efs-lifecycle-policy-missing",
+      "rule_short_id": "efs-lifecycle-policy-missing",
+      "resource_pattern": "efs://file-system/fs-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-access-key-older-than-90-days",
+      "rule_short_id": "iam-access-key-older-than-90-days",
+      "resource_pattern": "iam://user/bluearch-steward-iam-console-admin/access-key/key-[a-f0-9]{12}",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-console-user-mfa-disabled",
+      "rule_short_id": "iam-console-user-mfa-disabled",
+      "resource": "iam://user/bluearch-steward-iam-console-admin",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-password-policy-missing",
+      "rule_short_id": "iam-password-policy-missing",
+      "resource": "iam://account/password-policy",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-policy-attached-directly-to-user",
+      "rule_short_id": "iam-policy-attached-directly-to-user",
+      "resource": "iam://user/bluearch-steward-iam-console-admin",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-policy-full-admin",
+      "rule_short_id": "iam-policy-full-admin",
+      "resource": "iam://user/bluearch-steward-iam-console-admin",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-root-access-key-present",
+      "rule_short_id": "iam-root-access-key-present",
+      "resource": "iam://account/root",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-root-mfa-disabled",
+      "rule_short_id": "iam-root-mfa-disabled",
+      "resource": "iam://account/root",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-admin-execution-role",
+      "rule_short_id": "lambda-admin-execution-role",
+      "resource": "lambda://function/bluearch-steward-admin-role",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-unused-function",
+      "rule_short_id": "lambda-unused-function",
+      "resource": "lambda://function/bluearch-steward-unused",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-high-error-rate",
+      "rule_short_id": "lambda-high-error-rate",
+      "resource": "lambda://function/bluearch-steward-high-error",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-xray-tracing-disabled",
+      "rule_short_id": "lambda-xray-tracing-disabled",
+      "resource": "lambda://function/bluearch-steward-no-tracing",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "rds-gp2-storage",
+      "rule_short_id": "rds-gp2-storage",
+      "resource": "rds://db/bluearch-steward-rds",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "rds-idle-instance",
+      "rule_short_id": "rds-idle-instance",
+      "resource": "rds://db/bluearch-steward-rds",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "rds-multi-az-disabled",
+      "rule_short_id": "rds-multi-az-disabled",
+      "resource": "rds://db/bluearch-steward-rds",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "rds-publicly-accessible",
+      "rule_short_id": "rds-publicly-accessible",
+      "resource": "rds://db/bluearch-steward-rds",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "rds-storage-unencrypted",
+      "rule_short_id": "rds-storage-unencrypted",
+      "resource": "rds://db/bluearch-steward-rds",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-mfa-delete-disabled",
+      "rule_short_id": "s3-mfa-delete-disabled",
+      "resource": "s3://bluearch-steward-secure",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-no-default-encryption",
+      "rule_short_id": "s3-no-default-encryption",
+      "resource": "s3://bluearch-steward-unencrypted",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-no-lifecycle",
+      "rule_short_id": "s3-no-lifecycle",
+      "resource": "s3://bluearch-steward-no-lifecycle",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-intelligent-tiering-missing",
+      "rule_short_id": "s3-intelligent-tiering-missing",
+      "resource": "s3://bluearch-steward-no-tiering",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-policy-all-actions-public",
+      "rule_short_id": "s3-policy-all-actions-public",
+      "resource": "s3://bluearch-steward-policy-all-actions-public",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-policy-public-delete",
+      "rule_short_id": "s3-policy-public-delete",
+      "resource": "s3://bluearch-steward-policy-public-delete",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-public-bucket",
+      "rule_short_id": "s3-public-bucket",
+      "resource": "s3://bluearch-steward-public",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-server-access-logging-disabled",
+      "rule_short_id": "s3-server-access-logging-disabled",
+      "resource": "s3://bluearch-steward-server-logging-disabled",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-tls-enforcement-missing",
+      "rule_short_id": "s3-tls-enforcement-missing",
+      "resource": "s3://bluearch-steward-tls-missing",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-versioning-disabled",
+      "rule_short_id": "s3-versioning-disabled",
+      "resource": "s3://bluearch-steward-versioning-disabled",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "kms-key-rotation-disabled",
+      "rule_short_id": "kms-key-rotation-disabled",
+      "resource_pattern": "kms://key/[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "secrets-manager-rotation-disabled",
+      "rule_short_id": "secrets-manager-rotation-disabled",
+      "resource": "secrets-manager://secret/bluearch-steward-secret-no-rotation",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "sns-topic-encryption-disabled",
+      "rule_short_id": "sns-topic-encryption-disabled",
+      "resource": "sns://topic/bluearch-steward-topic-public-unencrypted",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "sns-topic-public-access",
+      "rule_short_id": "sns-topic-public-access",
+      "resource": "sns://topic/bluearch-steward-topic-public-unencrypted",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "sqs-queue-encryption-disabled",
+      "rule_short_id": "sqs-queue-encryption-disabled",
+      "resource": "sqs://queue/bluearch-steward-queue-public-unencrypted",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "sqs-queue-public-access",
+      "rule_short_id": "sqs-queue-public-access",
+      "resource": "sqs://queue/bluearch-steward-queue-public-unencrypted",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "api-gateway-access-logging-disabled",
+      "rule_short_id": "api-gateway-access-logging-disabled",
+      "resource_pattern": "api-gateway://rest-api/[a-z0-9]+/stage/fixture",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "api-gateway-execution-logging-disabled",
+      "rule_short_id": "api-gateway-execution-logging-disabled",
+      "resource_pattern": "api-gateway://rest-api/[a-z0-9]+/stage/fixture",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "api-gateway-xray-tracing-disabled",
+      "rule_short_id": "api-gateway-xray-tracing-disabled",
+      "resource_pattern": "api-gateway://rest-api/[a-z0-9]+/stage/fixture",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "api-gateway-method-authorization-missing",
+      "rule_short_id": "api-gateway-method-authorization-missing",
+      "resource_pattern": "api-gateway://rest-api/[a-z0-9]+/method/GET/",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "dynamodb-inactive-table",
+      "rule_short_id": "dynamodb-inactive-table",
+      "resource": "dynamodb://table/bluearch-steward-ddb-inactive",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "dynamodb-on-demand-low-utilization",
+      "rule_short_id": "dynamodb-on-demand-low-utilization",
+      "resource": "dynamodb://table/bluearch-steward-ddb-inactive",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "dynamodb-read-capacity-underutilized",
+      "rule_short_id": "dynamodb-read-capacity-underutilized",
+      "resource": "dynamodb://table/bluearch-steward-ddb-provisioned-low",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "dynamodb-standard-ia-candidate",
+      "rule_short_id": "dynamodb-standard-ia-candidate",
+      "resource": "dynamodb://table/bluearch-steward-ddb-infrequent",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "dynamodb-write-capacity-underutilized",
+      "rule_short_id": "dynamodb-write-capacity-underutilized",
+      "resource": "dynamodb://table/bluearch-steward-ddb-provisioned-low",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ebs-iops-saturation",
+      "rule_short_id": "ebs-iops-saturation",
+      "resource_pattern": "ebs://vol-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ebs-magnetic-volume-overutilized",
+      "rule_short_id": "ebs-magnetic-volume-overutilized",
+      "resource_pattern": "ebs://vol-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-dev-schedule-missing",
+      "rule_short_id": "ec2-dev-schedule-missing",
+      "resource_pattern": "ec2://instance/i-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-gp2-volume-candidate",
+      "rule_short_id": "ec2-gp2-volume-candidate",
+      "resource_pattern": "ebs://vol-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-high-cpu",
+      "rule_short_id": "ec2-high-cpu",
+      "resource_pattern": "ec2://instance/i-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-low-cpu-rightsizing",
+      "rule_short_id": "ec2-low-cpu-rightsizing",
+      "resource_pattern": "ec2://instance/i-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-previous-generation-instance",
+      "rule_short_id": "ec2-previous-generation-instance",
+      "resource_pattern": "ec2://instance/i-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ec2-unused-security-group",
+      "rule_short_id": "ec2-unused-security-group",
+      "resource_pattern": "ec2://security-group/sg-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ecs-inactive-task-definition",
+      "rule_short_id": "ecs-inactive-task-definition",
+      "resource": "ecs://task-definition/bluearch-steward-unsafe-inactive:1",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "ecs-service-health-degraded",
+      "rule_short_id": "ecs-service-health-degraded",
+      "resource": "ecs://service/bluearch-steward-outdated",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "efs-customer-kms-key-missing",
+      "rule_short_id": "efs-customer-kms-key-missing",
+      "resource_pattern": "efs://file-system/fs-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "efs-inactive-unmounted",
+      "rule_short_id": "efs-inactive-unmounted",
+      "resource_pattern": "efs://file-system/fs-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "efs-throughput-overprovisioned",
+      "rule_short_id": "efs-throughput-overprovisioned",
+      "resource_pattern": "efs://file-system/fs-[a-z0-9-]+",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-password-policy-number-missing",
+      "rule_short_id": "iam-password-policy-number-missing",
+      "resource": "iam://account/password-policy",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-role-wildcard-trust",
+      "rule_short_id": "iam-role-wildcard-trust",
+      "resource": "iam://role/bluearch-steward-wildcard-trust",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-root-hardware-mfa-missing",
+      "rule_short_id": "iam-root-hardware-mfa-missing",
+      "resource": "iam://account/root",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "iam-support-role-missing",
+      "rule_short_id": "iam-support-role-missing",
+      "resource": "iam://account/support-role",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-duration-near-timeout",
+      "rule_short_id": "lambda-duration-near-timeout",
+      "resource": "lambda://function/bluearch-steward-high-error",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-memory-pressure",
+      "rule_short_id": "lambda-memory-pressure",
+      "resource": "lambda://function/bluearch-steward-high-error",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-memory-underutilized",
+      "rule_short_id": "lambda-memory-underutilized",
+      "resource": "lambda://function/bluearch-steward-unused",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-provisioned-concurrency-underused",
+      "rule_short_id": "lambda-provisioned-concurrency-underused",
+      "resource": "lambda://function/bluearch-steward-unused",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-shared-execution-role",
+      "rule_short_id": "lambda-shared-execution-role",
+      "resource": "lambda://function/bluearch-steward-no-tracing",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-throttling-detected",
+      "rule_short_id": "lambda-throttling-detected",
+      "resource": "lambda://function/bluearch-steward-high-error",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "lambda-timeout-rate-high",
+      "rule_short_id": "lambda-timeout-rate-high",
+      "resource": "lambda://function/bluearch-steward-high-error",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "rds-high-cpu",
+      "rule_short_id": "rds-high-cpu",
+      "resource": "rds://db/bluearch-steward-rds-high-cpu",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "rds-low-cpu-rightsizing",
+      "rule_short_id": "rds-low-cpu-rightsizing",
+      "resource": "rds://db/bluearch-steward-rds",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "rds-previous-generation-instance",
+      "rule_short_id": "rds-previous-generation-instance",
+      "resource": "rds://db/bluearch-steward-rds",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "rds-read-heavy-no-replica",
+      "rule_short_id": "rds-read-heavy-no-replica",
+      "resource": "rds://db/bluearch-steward-rds",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "rds-storage-autoscaling-disabled",
+      "rule_short_id": "rds-storage-autoscaling-disabled",
+      "resource": "rds://db/bluearch-steward-rds",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-cloudtrail-access-logging-disabled",
+      "rule_short_id": "s3-cloudtrail-access-logging-disabled",
+      "resource": "s3://bluearch-steward-server-logging-disabled",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-kms-encryption-required",
+      "rule_short_id": "s3-kms-encryption-required",
+      "resource": "s3://bluearch-steward-server-logging-disabled",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-object-lock-required",
+      "rule_short_id": "s3-object-lock-required",
+      "resource": "s3://bluearch-steward-server-logging-disabled",
+      "minimum_count": 1
+    },
+    {
+      "fixture_id": "s3-replication-required",
+      "rule_short_id": "s3-replication-required",
+      "resource": "s3://bluearch-steward-server-logging-disabled",
+      "minimum_count": 1
+    }
+  ],
+  "expected_clean_resources": [
+    {
+      "resource": "cloudwatch-logs://log-group/bluearch-steward-retention-30-days"
+    }
+  ]
+}

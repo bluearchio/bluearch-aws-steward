@@ -1,0 +1,102 @@
+fixture_set: aws-emulator-all-active-rules
+catalog_source: bluearchio/aws-misconfig-db
+active_rule_source: bluearch_aws_steward/catalog/rules.json
+default_emulator: localemu
+tested_localemu_version: "1.1.0"
+localstack_compatibility_version: "3.8.1-community"
+
+summary:
+  executable_rules: 100
+  localemu_native_rules: 88
+  deterministic_overlay_rules: 12
+  end_to_end_rules: 100
+  end_to_end_percentage: 100.0
+
+contract:
+  - Every active rule must emit at least one finding in findings.native.json.
+  - Both AWS SDK and AWS CLI providers must evaluate exactly 100 rules.
+  - The stdio MCP flow must return all 100 rule IDs with zero skipped rules.
+  - Fixture traffic is loopback-only and always uses dummy credentials.
+  - No production threshold or provider behavior is weakened for emulator tests.
+
+native_coverage:
+  description: >
+    All active rules except the twelve entries below are backed entirely by
+    resource state and CloudWatch datapoints created through LocalEmu's normal
+    AWS-compatible APIs. The authoritative resource proof for each rule lives
+    in expected/findings.native.json.
+  rule_count: 88
+
+deterministic_overlays:
+  description: >
+    The loopback-only fixture proxy forwards every request to LocalEmu and
+    changes only response fields that no public AWS create API can set. The
+    underlying IAM key, EBS snapshot, and Lambda function still exist as real
+    LocalEmu resources. The proxy is test code and is never loaded by the
+    Steward package or production providers.
+  rules:
+    - short_id: iam-root-access-key-present
+      overlay: AccountAccessKeysPresent=1
+      reason: AWS IAM has no public API for creating a root access key on behalf of a test account.
+      underlying_resource: synthetic account-level state
+
+    - short_id: iam-access-key-older-than-90-days
+      overlay: access-key CreateDate=2020-01-01T00:00:00Z
+      reason: IAM CreateAccessKey does not accept a caller-provided creation timestamp.
+      underlying_resource: bluearch-steward-iam-console-admin access key
+
+    - short_id: ebs-orphaned-snapshot-or-ami
+      overlay: snapshot StartTime=2020-01-01T00:00:00Z
+      reason: EC2 CreateSnapshot does not accept a caller-provided creation timestamp.
+      underlying_resource: tagged orphaned LocalEmu EBS snapshot
+
+    - short_id: lambda-unused-function
+      overlay: function LastModified=2020-01-01T00:00:00Z
+      reason: Lambda creation APIs do not accept a caller-provided last-modified timestamp.
+      underlying_resource: bluearch-steward-unused plus 30 days of zero invocation metrics
+
+    - short_id: dynamodb-standard-ia-candidate
+      overlay: TableSizeBytes=2147483648
+      reason: Creating a multi-gigabyte table is unnecessary and impractical in a deterministic local test.
+      underlying_resource: bluearch-steward-ddb-infrequent with the explicit infrequent-access requirement tag
+
+    - short_id: dynamodb-inactive-table
+      overlay: isolate CloudWatch Sum series by TableName
+      reason: LocalEmu 1.1.0 combines metric series that share a namespace and metric name across dimensions.
+      underlying_resource: bluearch-steward-ddb-inactive plus 30 days of zero consumed-capacity datapoints
+
+    - short_id: dynamodb-on-demand-low-utilization
+      overlay: isolate CloudWatch Sum series by TableName
+      reason: LocalEmu 1.1.0 combines metric series that share a namespace and metric name across dimensions.
+      underlying_resource: bluearch-steward-ddb-inactive and bluearch-steward-ddb-infrequent
+
+    - short_id: dynamodb-read-capacity-underutilized
+      overlay: isolate CloudWatch Sum series by TableName
+      reason: LocalEmu 1.1.0 combines metric series that share a namespace and metric name across dimensions.
+      underlying_resource: bluearch-steward-ddb-provisioned-low plus 30 days of consumed read-capacity datapoints
+
+    - short_id: dynamodb-write-capacity-underutilized
+      overlay: isolate CloudWatch Sum series by TableName
+      reason: LocalEmu 1.1.0 combines metric series that share a namespace and metric name across dimensions.
+      underlying_resource: bluearch-steward-ddb-provisioned-low plus 30 days of consumed write-capacity datapoints
+
+    - short_id: rds-low-cpu-rightsizing
+      overlay: isolate CloudWatch Average series by DBInstanceIdentifier
+      reason: LocalEmu 1.1.0 combines metric series that share a namespace and metric name across dimensions.
+      underlying_resource: bluearch-steward-rds plus seven days of low-CPU datapoints
+
+    - short_id: rds-high-cpu
+      overlay: isolate CloudWatch Maximum series by DBInstanceIdentifier
+      reason: LocalEmu 1.1.0 combines metric series that share a namespace and metric name across dimensions.
+      underlying_resource: bluearch-steward-rds-high-cpu plus seven days of high-CPU datapoints
+
+    - short_id: rds-read-heavy-no-replica
+      overlay: isolate CloudWatch Average read and write IOPS by DBInstanceIdentifier
+      reason: LocalEmu 1.1.0 combines metric series that share a namespace and metric name across dimensions.
+      underlying_resource: bluearch-steward-rds plus seven days of read-heavy datapoints
+
+evidence:
+  fixture_assertions: tests/aws-emulator/scripts/assert-fixtures.sh
+  response_overlay: tests/aws-emulator/scripts/fixture_proxy.py
+  expected_findings: tests/aws-emulator/expected/findings.native.json
+  stdio_mcp_e2e: tests/aws-emulator/scripts/e2e-mcp.py

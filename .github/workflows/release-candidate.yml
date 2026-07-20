@@ -1,0 +1,47 @@
+name: Release candidate validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-package:
+    name: Build and install public package shape
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+      - name: Set up uv
+        run: python -m pip install --disable-pip-version-check "uv>=0.8,<1"
+      - name: Install locked development environment
+        run: uv sync --extra tui --dev --no-editable --locked
+      - name: Run package, quality, and security gates
+        run: make test quality security package-install-smoke
+      - name: Verify public uvx MCP configuration
+        run: |
+          config="$(uv run --no-sync bluearch-steward mcp config --runtime uvx)"
+          echo "$config" | python -c 'import json, sys; payload=json.load(sys.stdin)["mcpServers"]["bluearch-aws-steward"]; assert payload["args"][0] == "--from"; assert payload["args"][2] == "bluearch-steward-mcp"'
+
+  no-publish-guard:
+    name: Confirm pipeline has no publishing credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm validation-only policy
+        run: |
+          test -z "${TWINE_PASSWORD:-}"
+          test -z "${PYPI_API_TOKEN:-}"
+          echo "Validation only: no package registry, GitHub release, or deployment step is configured."

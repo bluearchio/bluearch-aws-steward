@@ -1,0 +1,43 @@
+{
+  "name": "bluearch-aws-steward-codex",
+  "version": "0.4.0",
+  "description": "Assess and safely remediate AWS misconfigurations from Codex using BlueArch rules.",
+  "author": {
+    "name": "BlueArch",
+    "email": "support@bluearch.io",
+    "url": "https://github.com/bluearchio"
+  },
+  "homepage": "https://github.com/bluearchio/bluearch-aws-steward",
+  "repository": "https://github.com/bluearchio/bluearch-aws-steward",
+  "license": "Apache-2.0",
+  "keywords": [
+    "aws",
+    "finops",
+    "governance",
+    "mcp",
+    "remediation"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "BlueArch AWS Steward",
+    "shortDescription": "Live AWS assessment and guarded remediation",
+    "longDescription": "Use guided natural-language choices to refine the assessment goal and AWS scope, select the correct AWS context, assess live resources against BlueArch rules, inspect evidence, plan fixes, approve supported changes, and verify outcomes.",
+    "developerName": "BlueArch",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write with approval"
+    ],
+    "websiteURL": "https://github.com/bluearchio/bluearch-aws-steward",
+    "brandColor": "#206CF5",
+    "defaultPrompt": [
+      "Assess my AWS environment. Ask me to choose the AWS profile and region, show only resources caught by native BlueArch rules, and report detection coverage.",
+      "Find my top 10 AWS cost-reduction opportunities across supported services. Group results by rule, show evidence, and report unevaluated catalog rules.",
+      "Review AWS security risks across supported services. Prioritize high severity findings, show only matched resources, and do not change AWS.",
+      "Search the complete BlueArch catalog for rules related to encryption and separate automated checks from manual or unevaluated guidance.",
+      "Create a no-write remediation plan for the selected finding, including permissions, impact, rollback, and verification."
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+services:
+  localemu:
+    image: ${LOCALEMU_IMAGE:-localemu/localemu:1.1.0@sha256:4cda1a9205554e5f6f8beb986cc88f75abcf987242a04cd9984ba1eb252827d4}
+    user: root
+    ports:
+      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:4510-4559:4510-4559"
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+      DEBUG: "${DEBUG:-0}"
+      GATEWAY_LISTEN: 0.0.0.0:4566
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  localstack:
+    profiles: ["localstack-compat"]
+    image: ${LOCALSTACK_IMAGE:-localstack/localstack:3@sha256:b279c01f4cfb8f985a482e4014cabc1e2697b9d7a6c8c8db2e40f4d9f93687c7}
+    ports:
+      - "127.0.0.1:4566:4566"
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+      DEBUG: "${DEBUG:-0}"
+      SERVICES: s3,ec2,iam,lambda,logs,cloudwatch,sts
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

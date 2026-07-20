@@ -1,0 +1,7 @@
+include CHANGELOG.md
+include CODE_OF_CONDUCT.md
+include CONTRIBUTING.md
+include SECURITY.md
+include bluearch_aws_steward/catalog/rules.json
+include bluearch_aws_steward/catalog/full_rules.json
+prune tests

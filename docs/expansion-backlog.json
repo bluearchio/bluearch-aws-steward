@@ -1,0 +1,701 @@
+{
+  "schema_version": "0.2",
+  "owner": "bluearch-aws-steward",
+  "purpose": "Machine-readable backlog for future native rule, LocalEmu fixture, MCP, and remediation expansion.",
+  "product_strategy": {
+    "positioning": "Local MCP-native recommendation-to-remediation engine for AWS developers.",
+    "primary_value": "Reduce the time and risk from a finding to a reviewed and verified AWS, IaC, or code fix.",
+    "not_primary_value": "Competing with Prowler, AWS native services, or enterprise CNAPP products on detector count alone.",
+    "delivery_priority": [
+      "cross-source finding aggregation and deduplication",
+      "live evidence refresh and business-value ranking",
+      "IaC source mapping and validated patches",
+      "focused investigation playbooks",
+      "selective native rules that unlock those workflows",
+      "multi-account team governance"
+    ]
+  },
+  "status_values": ["candidate", "specification", "fixture_design", "implementation", "native"],
+  "objective_values": [
+    "cost_optimization",
+    "security",
+    "reliability",
+    "operations",
+    "performance",
+    "sustainability"
+  ],
+  "remediation_modes": [
+    "planning_only",
+    "guarded_aws_apply",
+    "iac_patch",
+    "code_patch",
+    "debug_workflow"
+  ],
+  "localemu_modes": ["native", "overlay", "stub", "external_fixture", "not_supported"],
+  "selection_policy": {
+    "next_selection_target": 20,
+    "wave_selection_targets_are_not_rule_count_commitments": true,
+    "native_rule_gate": [
+      "catalog mapping or explicit new rule proposal",
+      "read-only provider capabilities",
+      "positive finding test",
+      "healthy resource test",
+      "pagination test",
+      "partial permission test",
+      "redacted evidence test",
+      "LocalEmu fixture proof or documented emulator limitation",
+      "remediation plan template",
+      "verification predicate",
+      "docs and prompt examples"
+    ],
+    "prioritization_factors": [
+      "customer impact",
+      "frequency in real AWS accounts",
+      "evidence quality",
+      "LocalEmu feasibility",
+      "safe remediation potential",
+      "IaC mapping potential",
+      "false-positive risk",
+      "ability to unlock an investigation or verified fix",
+      "incremental value beyond AWS native services and Prowler"
+    ]
+  },
+  "waves": [
+    {
+      "id": "wave-1-foundation-depth",
+      "description": "Deepen high-value AWS services already near the current provider boundary.",
+      "selection_target": 12,
+      "items": [
+        {
+          "short_id": "s3-stale-multipart-uploads",
+          "title": "S3 bucket has stale incomplete multipart uploads",
+          "service": "s3",
+          "runtime_scope": "s3",
+          "objectives": ["cost_optimization", "operations"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["s3.list_buckets", "s3.get_bucket_lifecycle_configuration"],
+          "localemu": {
+            "mode": "native",
+            "fixture": "bucket with no abort-incomplete-multipart-upload lifecycle rule"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": true,
+            "summary": "Add a lifecycle rule that aborts incomplete multipart uploads after a reviewed number of days."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "s3-intelligent-tiering-missing",
+          "title": "S3 bucket lacks lifecycle or Intelligent-Tiering policy for aging data",
+          "service": "s3",
+          "runtime_scope": "s3",
+          "objectives": ["cost_optimization", "sustainability"],
+          "evidence_kind": "configuration_and_signal",
+          "provider_capabilities": [
+            "s3.list_buckets",
+            "s3.get_bucket_lifecycle_configuration",
+            "cloudwatch.get_metric_data"
+          ],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "bucket plus synthetic storage-age signal"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": true,
+            "summary": "Add lifecycle or Intelligent-Tiering policy after storage-age evidence confirms value."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "native",
+          "completed_in_version": "0.5.0-dev",
+          "native_rule": {
+            "short_id": "s3-intelligent-tiering-missing",
+            "source_id": "ffc337be-4cb6-4899-b02c-d447af23221e",
+            "localemu_fixture": "s3://bluearch-steward-no-tiering"
+          }
+        },
+        {
+          "short_id": "iam-unused-user",
+          "title": "IAM user has no recent password or access-key activity",
+          "service": "iam",
+          "runtime_scope": "iam",
+          "objectives": ["security", "operations"],
+          "evidence_kind": "configuration_and_signal",
+          "provider_capabilities": [
+            "iam.list_users",
+            "iam.get_login_profile",
+            "iam.list_access_keys",
+            "iam.get_access_key_last_used"
+          ],
+          "localemu": {
+            "mode": "overlay",
+            "fixture": "IAM user with synthetic last-used timestamps"
+          },
+          "remediation": {
+            "mode": "planning_only",
+            "guarded_apply_candidate": false,
+            "summary": "Review owner, disable credentials, then delete after an approved access-review process."
+          },
+          "iac_targets": ["terraform", "cloudformation"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "iam-role-unused",
+          "title": "IAM role has no recent usage",
+          "service": "iam",
+          "runtime_scope": "iam",
+          "objectives": ["security", "operations"],
+          "evidence_kind": "configuration_and_signal",
+          "provider_capabilities": ["iam.list_roles", "iam.get_role"],
+          "localemu": {
+            "mode": "overlay",
+            "fixture": "IAM role with synthetic role-last-used timestamp"
+          },
+          "remediation": {
+            "mode": "planning_only",
+            "guarded_apply_candidate": false,
+            "summary": "Review trust relationships and consumers before removing or narrowing the role."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "iam-role-wildcard-trust",
+          "title": "IAM role trust policy allows broad external principals",
+          "service": "iam",
+          "runtime_scope": "iam",
+          "objectives": ["security"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["iam.list_roles", "iam.get_role"],
+          "localemu": {
+            "mode": "native",
+            "fixture": "role with wildcard or unconditioned cross-account trust policy"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Scope the trust policy to reviewed principals and external ID or organization conditions."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "native",
+          "completed_in_version": "0.7.0",
+          "native_rule": {
+            "short_id": "iam-role-wildcard-trust",
+            "source_id": "718ac930-9ba0-42a1-a31b-fad73f2a66da",
+            "localemu_fixture": "iam://role/bluearch-steward-wildcard-trust"
+          }
+        },
+        {
+          "short_id": "ec2-gp2-volume-candidate",
+          "title": "EBS gp2 volume is a gp3 migration candidate",
+          "service": "ec2",
+          "runtime_scope": "ec2",
+          "objectives": ["cost_optimization", "performance"],
+          "evidence_kind": "configuration_and_signal",
+          "provider_capabilities": ["ec2.describe_volumes", "cloudwatch.get_metric_data"],
+          "localemu": {
+            "mode": "native",
+            "fixture": "gp2 EBS volume with synthetic utilization datapoints"
+          },
+          "remediation": {
+            "mode": "planning_only",
+            "guarded_apply_candidate": false,
+            "summary": "Recommend gp3 migration only with size, IOPS, throughput, and workload risk evidence."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "native",
+          "completed_in_version": "0.7.0",
+          "native_rule": {
+            "short_id": "ec2-gp2-volume-candidate",
+            "source_id": "0f5cfb3e-623b-4140-a5ed-db4b5be406f8",
+            "localemu_fixture": "ebs://vol-*"
+          }
+        },
+        {
+          "short_id": "ec2-old-ami-in-use",
+          "title": "EC2 instance runs an old or deprecated AMI",
+          "service": "ec2",
+          "runtime_scope": "ec2",
+          "objectives": ["security", "operations"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["ec2.describe_instances", "ec2.describe_images"],
+          "localemu": {
+            "mode": "overlay",
+            "fixture": "instance with synthetic old AMI creation date"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Patch launch template, Auto Scaling group, or IaC image reference after compatibility review."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "rds-backup-retention-disabled",
+          "title": "RDS instance has backup retention disabled",
+          "service": "rds",
+          "runtime_scope": "rds",
+          "objectives": ["reliability", "security"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["rds.describe_db_instances"],
+          "localemu": {
+            "mode": "native",
+            "fixture": "RDS instance with backup_retention_period=0"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": true,
+            "summary": "Set a reviewed backup retention period and maintenance window."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "rds-deletion-protection-disabled",
+          "title": "Production-like RDS instance lacks deletion protection",
+          "service": "rds",
+          "runtime_scope": "rds",
+          "objectives": ["reliability", "operations"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["rds.describe_db_instances", "rds.list_tags_for_resource"],
+          "localemu": {
+            "mode": "native",
+            "fixture": "tagged production RDS instance with deletion protection disabled"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": true,
+            "summary": "Enable deletion protection for production-tagged databases after owner review."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "lambda-deprecated-runtime",
+          "title": "Lambda function uses a deprecated or near-EOL runtime",
+          "service": "lambda",
+          "runtime_scope": "lambda",
+          "objectives": ["security", "operations"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["lambda.list_functions"],
+          "localemu": {
+            "mode": "native",
+            "fixture": "Lambda function with deprecated runtime"
+          },
+          "remediation": {
+            "mode": "code_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Update runtime in IaC and inspect code dependency compatibility before deployment."
+          },
+          "iac_targets": ["terraform", "cloudformation", "sam", "serverless-framework"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "lambda-async-destination-missing",
+          "title": "Async Lambda function lacks failure destination or DLQ",
+          "service": "lambda",
+          "runtime_scope": "lambda",
+          "objectives": ["reliability", "operations"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": [
+            "lambda.list_functions",
+            "lambda.get_function_event_invoke_config"
+          ],
+          "localemu": {
+            "mode": "native",
+            "fixture": "Lambda function with async config and no failure destination"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Add a reviewed failure destination or DLQ and update retry policy."
+          },
+          "iac_targets": ["terraform", "cloudformation", "sam", "serverless-framework"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "alb-waf-missing",
+          "title": "Internet-facing ALB has no WAF association",
+          "service": "alb",
+          "runtime_scope": "alb",
+          "objectives": ["security"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": [
+            "elasticloadbalancing.describe_load_balancers",
+            "wafv2.get_web_acl_for_resource"
+          ],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "internet-facing ALB plus WAF lookup response"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Associate a reviewed WAF web ACL with the public load balancer."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "ecr-repository-public-policy",
+          "title": "ECR repository policy allows public or broad cross-account pull",
+          "service": "ecr",
+          "runtime_scope": "ecr",
+          "objectives": ["security"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["ecr.describe_repositories", "ecr.get_repository_policy"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "ECR repository with broad repository policy"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Restrict repository policy principals and conditions."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "ecr-image-scan-disabled",
+          "title": "ECR repository does not scan images on push",
+          "service": "ecr",
+          "runtime_scope": "ecr",
+          "objectives": ["security", "operations"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["ecr.describe_repositories"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "ECR repository with imageScanningConfiguration.scanOnPush=false"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": true,
+            "summary": "Enable scan-on-push or enhanced scanning based on repository policy."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "dynamodb-pitr-disabled",
+          "title": "DynamoDB table has point-in-time recovery disabled",
+          "service": "dynamodb",
+          "runtime_scope": "dynamodb",
+          "objectives": ["reliability", "security"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["dynamodb.list_tables", "dynamodb.describe_continuous_backups"],
+          "localemu": {
+            "mode": "native",
+            "fixture": "DynamoDB table with point-in-time recovery disabled"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": true,
+            "summary": "Enable point-in-time recovery for critical tables."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "dynamodb-on-demand-idle-table",
+          "title": "DynamoDB table appears idle while incurring storage or capacity cost",
+          "service": "dynamodb",
+          "runtime_scope": "dynamodb",
+          "objectives": ["cost_optimization"],
+          "evidence_kind": "signal",
+          "provider_capabilities": ["dynamodb.list_tables", "dynamodb.describe_table", "cloudwatch.get_metric_data"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "DynamoDB table plus synthetic consumed-capacity metrics"
+          },
+          "remediation": {
+            "mode": "planning_only",
+            "guarded_apply_candidate": false,
+            "summary": "Review dependencies before archival, deletion, or capacity-mode changes."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "cloudfront-logging-disabled",
+          "title": "CloudFront distribution does not emit access logs",
+          "service": "cloudfront",
+          "runtime_scope": "cloudfront",
+          "objectives": ["security", "operations"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["cloudfront.list_distributions"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "CloudFront distribution with logging disabled"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Enable standard or real-time logging to a reviewed destination."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "cloudfront-minimum-tls-outdated",
+          "title": "CloudFront distribution allows outdated viewer TLS policy",
+          "service": "cloudfront",
+          "runtime_scope": "cloudfront",
+          "objectives": ["security"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["cloudfront.list_distributions"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "CloudFront distribution with old minimum protocol version"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Raise the viewer certificate minimum protocol version after client compatibility review."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "waf-public-entrypoint-missing",
+          "title": "Public application entry point is not protected by WAF",
+          "service": "waf",
+          "runtime_scope": "waf",
+          "objectives": ["security"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": [
+            "wafv2.list_web_acls",
+            "wafv2.list_resources_for_web_acl",
+            "elasticloadbalancing.describe_load_balancers",
+            "cloudfront.list_distributions"
+          ],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "public ALB or CloudFront distribution with no WAF association"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Attach a reviewed WAF web ACL to the public application entry point."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "route53-dangling-cname",
+          "title": "Route 53 record may point to an unclaimed external target",
+          "service": "route53",
+          "runtime_scope": "route53",
+          "objectives": ["security", "operations"],
+          "evidence_kind": "configuration_and_external_signal",
+          "provider_capabilities": ["route53.list_hosted_zones", "route53.list_resource_record_sets"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "hosted zone with CNAME to known unclaimed fixture domain"
+          },
+          "remediation": {
+            "mode": "planning_only",
+            "guarded_apply_candidate": false,
+            "summary": "Verify ownership of the target before deleting or changing DNS records."
+          },
+          "iac_targets": ["terraform", "cloudformation"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "backup-critical-resource-unprotected",
+          "title": "Tagged critical resource is not covered by AWS Backup",
+          "service": "backup",
+          "runtime_scope": "backup",
+          "objectives": ["reliability", "operations"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": [
+            "backup.list_backup_plans",
+            "backup.list_protected_resources",
+            "resourcegroupstaggingapi.get_resources"
+          ],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "critical-tagged resource with no protected-resource match"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Add the resource to a reviewed backup plan or tag-based backup selection."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        }
+      ]
+    },
+    {
+      "id": "wave-2-eks-and-performance",
+      "description": "Add EKS, Kubernetes, and high-confidence performance debugging recommendations.",
+      "selection_target": 8,
+      "items": [
+        {
+          "short_id": "eks-public-endpoint-open",
+          "title": "EKS cluster public endpoint is open without restricted CIDRs",
+          "service": "eks",
+          "runtime_scope": "eks",
+          "objectives": ["security"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["eks.list_clusters", "eks.describe_cluster"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "EKS cluster response with public endpoint and 0.0.0.0/0 access"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Restrict public endpoint CIDRs or enable private endpoint access through IaC."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk", "eksctl"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "eks-control-plane-logging-disabled",
+          "title": "EKS control plane logging is not fully enabled",
+          "service": "eks",
+          "runtime_scope": "eks",
+          "objectives": ["security", "operations"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["eks.list_clusters", "eks.describe_cluster"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "EKS cluster response with disabled audit and authenticator logs"
+          },
+          "remediation": {
+            "mode": "iac_patch",
+            "guarded_apply_candidate": true,
+            "summary": "Enable reviewed EKS control plane log types."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk", "eksctl"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "eks-secrets-encryption-disabled",
+          "title": "EKS cluster does not encrypt Kubernetes secrets with KMS",
+          "service": "eks",
+          "runtime_scope": "eks",
+          "objectives": ["security"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["eks.list_clusters", "eks.describe_cluster"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "EKS cluster response without encryptionConfig"
+          },
+          "remediation": {
+            "mode": "planning_only",
+            "guarded_apply_candidate": false,
+            "summary": "Plan secrets encryption with migration and cluster-version constraints."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk", "eksctl"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "k8s-workload-missing-resource-requests",
+          "title": "Kubernetes workload lacks CPU or memory requests",
+          "service": "kubernetes",
+          "runtime_scope": "kubernetes",
+          "objectives": ["performance", "reliability", "cost_optimization"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["kubernetes.list_workloads"],
+          "localemu": {
+            "mode": "external_fixture",
+            "fixture": "Kubernetes manifest fixture with Deployment missing requests"
+          },
+          "remediation": {
+            "mode": "code_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Patch Kubernetes manifests or Helm values with reviewed resource requests."
+          },
+          "iac_targets": ["kubernetes", "helm", "kustomize"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "k8s-workload-missing-probes",
+          "title": "Kubernetes workload lacks readiness or liveness probes",
+          "service": "kubernetes",
+          "runtime_scope": "kubernetes",
+          "objectives": ["reliability", "operations"],
+          "evidence_kind": "configuration",
+          "provider_capabilities": ["kubernetes.list_workloads"],
+          "localemu": {
+            "mode": "external_fixture",
+            "fixture": "Kubernetes manifest fixture with missing readiness and liveness probes"
+          },
+          "remediation": {
+            "mode": "code_patch",
+            "guarded_apply_candidate": false,
+            "summary": "Patch manifests with application-specific probes and validation commands."
+          },
+          "iac_targets": ["kubernetes", "helm", "kustomize"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "eks-pod-cpu-throttling",
+          "title": "EKS workload shows sustained CPU throttling",
+          "service": "eks",
+          "runtime_scope": "eks",
+          "objectives": ["performance"],
+          "evidence_kind": "signal",
+          "provider_capabilities": ["cloudwatch.get_metric_data", "kubernetes.list_pods"],
+          "localemu": {
+            "mode": "external_fixture",
+            "fixture": "Kubernetes workload plus synthetic Container Insights throttling metrics"
+          },
+          "remediation": {
+            "mode": "debug_workflow",
+            "guarded_apply_candidate": false,
+            "summary": "Inspect workload limits, HPA, node pressure, and code hotspots before proposing a patch."
+          },
+          "iac_targets": ["kubernetes", "helm", "kustomize"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "lambda-high-duration-near-timeout",
+          "title": "Lambda function duration is consistently near timeout",
+          "service": "lambda",
+          "runtime_scope": "lambda",
+          "objectives": ["performance", "reliability"],
+          "evidence_kind": "signal",
+          "provider_capabilities": ["lambda.list_functions", "cloudwatch.get_metric_data"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "Lambda function plus synthetic duration and timeout metrics"
+          },
+          "remediation": {
+            "mode": "debug_workflow",
+            "guarded_apply_candidate": false,
+            "summary": "Inspect timeout, memory, logs, and code path before patching runtime config or source code."
+          },
+          "iac_targets": ["terraform", "cloudformation", "sam", "serverless-framework"],
+          "status": "candidate"
+        },
+        {
+          "short_id": "rds-high-cpu-sustained",
+          "title": "RDS instance has sustained high CPU pressure",
+          "service": "rds",
+          "runtime_scope": "rds",
+          "objectives": ["performance", "reliability"],
+          "evidence_kind": "signal",
+          "provider_capabilities": ["rds.describe_db_instances", "cloudwatch.get_metric_data"],
+          "localemu": {
+            "mode": "stub",
+            "fixture": "RDS instance plus synthetic CPU datapoints"
+          },
+          "remediation": {
+            "mode": "debug_workflow",
+            "guarded_apply_candidate": false,
+            "summary": "Inspect workload, Performance Insights availability, instance class, and query pressure before recommending change."
+          },
+          "iac_targets": ["terraform", "cloudformation", "cdk"],
+          "status": "candidate"
+        }
+      ]
+    }
+  ]
+}
