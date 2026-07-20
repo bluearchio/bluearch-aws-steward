@@ -62,8 +62,9 @@ and a reviewed support and security process.
 
 - Pull requests run unit tests only on the minimum and newest supported Python
   versions, plus quality/package and CodeQL checks.
-- The Docker-based LocalEmu E2E runs on `main` and manual dispatch, not on every
-  pull-request update.
+- The Docker-based LocalEmu E2E has a separate path-filtered workflow. It runs
+  on relevant `main` changes and manual dispatch, not on every workflow or
+  documentation update.
 - Release-candidate validation is manual and must be started only for an actual
   preview or release decision.
 - Documentation-only changes skip CI and CodeQL.

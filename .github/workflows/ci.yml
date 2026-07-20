@@ -45,34 +45,6 @@ jobs:
       - name: Run tests and generated-artifact checks
         run: make test
 
-  emulator-mcp:
-    name: LocalEmu MCP E2E
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.11"
-      - name: Set up uv
-        run: python -m pip install --disable-pip-version-check "uv>=0.8,<1"
-      - name: Install runtime
-        run: uv sync --extra tui --no-editable --locked
-      - name: Confirm fixture dependencies
-        run: |
-          aws --version
-          docker compose version
-      - name: Run real stdio MCP flow against LocalEmu
-        run: make emulator-coverage
-      - name: Stop LocalEmu
-        if: always()
-        run: docker compose -f tests/aws-emulator/docker-compose.yml down --volumes
-
   quality:
     name: Quality and package
     runs-on: ubuntu-latest
