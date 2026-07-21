@@ -706,7 +706,10 @@ def _policy_accepts_cloudtrail_writes(policy: Dict[str, Any] | None) -> bool:
             services = [str(item) for item in value] if isinstance(value, list) else [str(value)]
         actions = statement.get("Action")
         actions = actions if isinstance(actions, list) else [actions]
-        if "cloudtrail.amazonaws.com" in services and any(
+        accepts_cloudtrail = any(
+            service.strip().lower() == "cloudtrail.amazonaws.com" for service in services
+        )
+        if accepts_cloudtrail and any(
             str(action).lower() in {"s3:putobject", "s3:*", "*"} for action in actions
         ):
             return True

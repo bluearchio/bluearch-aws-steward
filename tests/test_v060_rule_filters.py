@@ -4,7 +4,7 @@ import unittest
 from typing import Any, Dict, List, Optional, Set
 
 from bluearch_aws_steward.detectors.ecs import scan_ecs
-from bluearch_aws_steward.detectors.s3 import scan_s3
+from bluearch_aws_steward.detectors.s3 import _policy_accepts_cloudtrail_writes, scan_s3
 from bluearch_aws_steward.providers.operations import READ_OPERATIONS
 
 
@@ -64,6 +64,32 @@ class FilteredEcsProvider:
 
 
 class V060RuleFilterTests(unittest.TestCase):
+    def test_cloudtrail_write_policy_requires_exact_service_principal(self) -> None:
+        policy = {
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "cloudtrail.amazonaws.com.attacker.example"},
+                    "Action": "s3:PutObject",
+                }
+            ]
+        }
+
+        self.assertFalse(_policy_accepts_cloudtrail_writes(policy))
+
+    def test_cloudtrail_write_policy_normalizes_exact_service_principal(self) -> None:
+        policy = {
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": " CloudTrail.AmazonAWS.com "},
+                    "Action": "s3:PutObject",
+                }
+            ]
+        }
+
+        self.assertTrue(_policy_accepts_cloudtrail_writes(policy))
+
     def test_cloudtrail_bucket_logging_rule_loads_policy_when_filtered_alone(self) -> None:
         provider = FilteredS3Provider()
 

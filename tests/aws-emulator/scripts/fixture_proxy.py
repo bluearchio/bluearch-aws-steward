@@ -13,6 +13,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, Iterable, Tuple
 from urllib.parse import parse_qs, urlsplit
 
+from defusedxml import ElementTree as DefusedET
+from defusedxml.common import DefusedXmlException
+
 from bluearch_aws_steward.aws_endpoints import is_loopback_aws_endpoint
 
 ENDPOINT_TOKEN = "__FIXTURE_ENDPOINT__"
@@ -27,6 +30,48 @@ _HOP_BY_HOP_HEADERS = {
     "transfer-encoding",
     "upgrade",
 }
+_FORWARDED_RESPONSE_HEADERS = {
+    "accept-ranges": "Accept-Ranges",
+    "cache-control": "Cache-Control",
+    "content-disposition": "Content-Disposition",
+    "content-language": "Content-Language",
+    "content-type": "Content-Type",
+    "date": "Date",
+    "etag": "ETag",
+    "expires": "Expires",
+    "last-modified": "Last-Modified",
+    "location": "Location",
+    "retry-after": "Retry-After",
+    "x-amz-bucket-region": "x-amz-bucket-region",
+    "x-amz-checksum-crc32": "x-amz-checksum-crc32",
+    "x-amz-checksum-crc32c": "x-amz-checksum-crc32c",
+    "x-amz-checksum-crc64nvme": "x-amz-checksum-crc64nvme",
+    "x-amz-checksum-sha1": "x-amz-checksum-sha1",
+    "x-amz-checksum-sha256": "x-amz-checksum-sha256",
+    "x-amz-checksum-type": "x-amz-checksum-type",
+    "x-amz-delete-marker": "x-amz-delete-marker",
+    "x-amz-expiration": "x-amz-expiration",
+    "x-amz-id-2": "x-amz-id-2",
+    "x-amz-missing-meta": "x-amz-missing-meta",
+    "x-amz-mp-parts-count": "x-amz-mp-parts-count",
+    "x-amz-object-lock-legal-hold": "x-amz-object-lock-legal-hold",
+    "x-amz-object-lock-mode": "x-amz-object-lock-mode",
+    "x-amz-object-lock-retain-until-date": "x-amz-object-lock-retain-until-date",
+    "x-amz-replication-status": "x-amz-replication-status",
+    "x-amz-request-id": "x-amz-request-id",
+    "x-amz-restore": "x-amz-restore",
+    "x-amz-server-side-encryption": "x-amz-server-side-encryption",
+    "x-amz-server-side-encryption-aws-kms-key-id": ("x-amz-server-side-encryption-aws-kms-key-id"),
+    "x-amz-server-side-encryption-bucket-key-enabled": (
+        "x-amz-server-side-encryption-bucket-key-enabled"
+    ),
+    "x-amz-storage-class": "x-amz-storage-class",
+    "x-amz-tagging-count": "x-amz-tagging-count",
+    "x-amz-version-id": "x-amz-version-id",
+    "x-amz-website-redirect-location": "x-amz-website-redirect-location",
+    "x-amzn-requestid": "x-amzn-requestid",
+}
+_SAFE_RESPONSE_HEADER_VALUE = re.compile(r"[\t\x20-\x7e\x80-\xff]*")
 
 
 class FixtureProxy:
@@ -157,7 +202,7 @@ class _FixtureProxyHandler(BaseHTTPRequestHandler):
             request_path=self.path,
         )
         body_changed = patched_body != response_body
-        self.send_response(response.status, response.reason)
+        self.send_response(response.status)
         for name, value in response_headers:
             lower = name.lower()
             if lower in _HOP_BY_HOP_HEADERS or lower in {"content-length", "content-encoding"}:
@@ -168,7 +213,11 @@ class _FixtureProxyHandler(BaseHTTPRequestHandler):
                 or lower.startswith("x-amz-checksum-")
             ):
                 continue
-            self.send_header(name, value)
+            safe_name = _FORWARDED_RESPONSE_HEADERS.get(lower)
+            safe_value = _SAFE_RESPONSE_HEADER_VALUE.fullmatch(value)
+            if safe_name is None or safe_value is None:
+                continue
+            self.send_header(safe_name, safe_value.group(0))
         self.send_header("Content-Length", str(len(patched_body)))
         self.send_header("Connection", "close")
         self.end_headers()
@@ -464,8 +513,8 @@ def _patch_xml_values(payload: bytes, local_name: str, value: str) -> bytes:
 
 def _parse_xml(payload: bytes) -> ET.Element | None:
     try:
-        return ET.fromstring(payload)
-    except ET.ParseError:
+        return DefusedET.fromstring(payload)
+    except (ET.ParseError, DefusedXmlException):
         return None
 
 
