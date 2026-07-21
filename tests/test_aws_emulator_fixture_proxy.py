@@ -26,16 +26,15 @@ FIXTURE_PROXY = _load_fixture_proxy()
 
 class FixtureProxyTests(unittest.TestCase):
     def test_response_header_allowlist_rejects_injected_or_unknown_headers(self) -> None:
-        allowed_name = FIXTURE_PROXY._FORWARDED_RESPONSE_HEADERS.get("content-type")
-        allowed_value = FIXTURE_PROXY._SAFE_RESPONSE_HEADER_VALUE.fullmatch("application/json")
-        injected_value = FIXTURE_PROXY._SAFE_RESPONSE_HEADER_VALUE.fullmatch(
-            "application/json\r\nX-Injected: true"
+        allowed = FIXTURE_PROXY._response_header_for_forwarding("content-type", "application/json")
+        injected = FIXTURE_PROXY._response_header_for_forwarding(
+            "content-type", "application/json\r\nX-Injected: true"
         )
+        unknown = FIXTURE_PROXY._response_header_for_forwarding("x-untrusted", "value")
 
-        self.assertEqual(allowed_name, "Content-Type")
-        self.assertIsNotNone(allowed_value)
-        self.assertIsNone(injected_value)
-        self.assertIsNone(FIXTURE_PROXY._FORWARDED_RESPONSE_HEADERS.get("x-untrusted"))
+        self.assertEqual(allowed, ("Content-Type", "application/json"))
+        self.assertIsNone(injected)
+        self.assertIsNone(unknown)
 
     def test_xml_parser_rejects_entity_expansion(self) -> None:
         payload = b'<!DOCTYPE root [<!ENTITY repeated "expanded">]><root>&repeated;</root>'

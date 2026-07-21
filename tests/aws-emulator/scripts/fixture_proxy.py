@@ -71,7 +71,14 @@ _FORWARDED_RESPONSE_HEADERS = {
     "x-amz-website-redirect-location": "x-amz-website-redirect-location",
     "x-amzn-requestid": "x-amzn-requestid",
 }
-_SAFE_RESPONSE_HEADER_VALUE = re.compile(r"[\t\x20-\x7e\x80-\xff]*")
+
+
+def _response_header_for_forwarding(name: str, value: str) -> tuple[str, str] | None:
+    safe_name = _FORWARDED_RESPONSE_HEADERS.get(name.lower())
+    safe_value = value.replace("\n", "").replace("\r", "").replace("\0", "")
+    if safe_name is None or safe_value != value:
+        return None
+    return safe_name, safe_value
 
 
 class FixtureProxy:
@@ -213,11 +220,11 @@ class _FixtureProxyHandler(BaseHTTPRequestHandler):
                 or lower.startswith("x-amz-checksum-")
             ):
                 continue
-            safe_name = _FORWARDED_RESPONSE_HEADERS.get(lower)
-            safe_value = _SAFE_RESPONSE_HEADER_VALUE.fullmatch(value)
-            if safe_name is None or safe_value is None:
+            safe_header = _response_header_for_forwarding(name, value)
+            if safe_header is None:
                 continue
-            self.send_header(safe_name, safe_value.group(0))
+            safe_name, safe_value = safe_header
+            self.send_header(safe_name, safe_value)
         self.send_header("Content-Length", str(len(patched_body)))
         self.send_header("Connection", "close")
         self.end_headers()
