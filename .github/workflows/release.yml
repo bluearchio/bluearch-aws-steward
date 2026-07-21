@@ -92,18 +92,41 @@ jobs:
           python-version: "3.13"
       - name: Set up uv
         run: python -m pip install --disable-pip-version-check "uv>=0.8,<1"
-      - name: Install the uploaded preview
+      - name: Resolve the exact uploaded TestPyPI wheel
+        id: testpypi-wheel
         env:
           PACKAGE_VERSION: ${{ github.ref_name }}
         run: |
           version="${PACKAGE_VERSION#v}"
           for attempt in 1 2 3 4 5; do
-            if UV_TOOL_DIR=/tmp/bluearch-steward-preview-tools \
-              UV_TOOL_BIN_DIR=/tmp/bluearch-steward-preview-bin \
-              uv tool install --force \
-                --index https://test.pypi.org/simple/ \
-                --default-index https://pypi.org/simple/ \
-                "bluearch-aws-steward==${version}"; then
+            if PACKAGE_VERSION="${version}" python - <<'PY' > /tmp/testpypi-wheel
+          import json
+          import os
+          import re
+          import urllib.parse
+          import urllib.request
+
+          version = os.environ["PACKAGE_VERSION"]
+          endpoint = f"https://test.pypi.org/pypi/bluearch-aws-steward/{version}/json"
+          with urllib.request.urlopen(endpoint, timeout=15) as response:
+              payload = json.load(response)
+
+          expected = f"bluearch_aws_steward-{version}-py3-none-any.whl"
+          matches = [item for item in payload["urls"] if item["filename"] == expected]
+          if len(matches) != 1:
+              raise SystemExit(f"expected one wheel named {expected}, found {len(matches)}")
+
+          wheel = matches[0]
+          url = wheel["url"]
+          parsed = urllib.parse.urlparse(url)
+          if parsed.scheme != "https" or parsed.hostname != "test-files.pythonhosted.org":
+              raise SystemExit(f"unexpected TestPyPI file host: {parsed.hostname}")
+          digest = wheel["digests"]["sha256"]
+          if not re.fullmatch(r"[0-9a-f]{64}", digest):
+              raise SystemExit("TestPyPI returned an invalid SHA-256 digest")
+          print(f"{url}#sha256={digest}")
+          PY
+            then
               break
             fi
             if test "${attempt}" = "5"; then
@@ -111,6 +134,18 @@ jobs:
             fi
             sleep 15
           done
+          echo "requirement=$(cat /tmp/testpypi-wheel)" >> "${GITHUB_OUTPUT}"
+      - name: Install the uploaded preview
+        env:
+          PACKAGE_VERSION: ${{ github.ref_name }}
+          WHEEL_REQUIREMENT: ${{ steps.testpypi-wheel.outputs.requirement }}
+        run: |
+          version="${PACKAGE_VERSION#v}"
+          UV_TOOL_DIR=/tmp/bluearch-steward-preview-tools \
+            UV_TOOL_BIN_DIR=/tmp/bluearch-steward-preview-bin \
+            uv tool install --force \
+              --default-index https://pypi.org/simple/ \
+              "${WHEEL_REQUIREMENT}"
           /tmp/bluearch-steward-preview-bin/bluearch-steward --version | grep -F "${version}"
           /tmp/bluearch-steward-preview-bin/bluearch-steward mcp smoke
           /tmp/bluearch-steward-preview-bin/bluearch-steward mcp install \

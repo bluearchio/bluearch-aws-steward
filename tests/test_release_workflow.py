@@ -22,6 +22,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
         )
         self.assertIn("--draft", self.workflow)
         self.assertNotIn("https://upload.pypi.org/legacy/", self.workflow)
+        self.assertIn("test-files.pythonhosted.org", self.workflow)
+        self.assertIn('"${WHEEL_REQUIREMENT}"', self.workflow)
+        self.assertNotIn("unsafe-best-match", self.workflow)
 
     def test_pypi_publication_requires_a_published_prerelease(self) -> None:
         self.assertIn("types: [published]", self.publish_workflow)

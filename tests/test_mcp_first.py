@@ -358,7 +358,7 @@ class McpFirstWorkflowTests(unittest.TestCase):
         config = mcp_client_config(
             runtime="uvx",
             uvx_executable="/usr/local/bin/uvx",
-            package_version="0.7.0b2",
+            package_version="0.7.0b3",
         )["mcpServers"]["bluearch-aws-steward"]
 
         self.assertEqual(config["command"], "/usr/local/bin/uvx")
@@ -366,7 +366,7 @@ class McpFirstWorkflowTests(unittest.TestCase):
             config["args"],
             [
                 "--from",
-                "bluearch-aws-steward==0.7.0b2",
+                "bluearch-aws-steward==0.7.0b3",
                 "bluearch-steward-mcp",
             ],
         )

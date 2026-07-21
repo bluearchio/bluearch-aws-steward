@@ -17,7 +17,7 @@ and `uv` can provide the compatible Python runtime required by Steward.
 Install Steward as an isolated persistent tool:
 
 ```bash
-uv tool install 'bluearch-aws-steward==0.7.0b2'
+uv tool install 'bluearch-aws-steward==0.7.0b3'
 uv tool update-shell
 bluearch-steward --version
 bluearch-steward mcp smoke
@@ -55,10 +55,10 @@ environment:
 bluearch-steward mcp config --runtime uvx
 ```
 
-For preview version `0.7.0b2`, the generated server executes the equivalent of:
+For preview version `0.7.0b3`, the generated server executes the equivalent of:
 
 ```bash
-uvx --from bluearch-aws-steward==0.7.0b2 bluearch-steward-mcp
+uvx --from bluearch-aws-steward==0.7.0b3 bluearch-steward-mcp
 ```
 
 Persistent `uv tool install` is the default recommendation because startup does
@@ -139,6 +139,6 @@ package indexes use short-lived OIDC credentials, not stored API tokens.
 Before public package publication, the remaining manual steps are:
 
 1. Configure pending Trusted Publishers for PyPI and TestPyPI.
-2. Push the annotated `v0.7.0b2` tag only after the latest commit passes all gates.
+2. Push the annotated `v0.7.0b3` tag only after the latest commit passes all gates.
 3. Review the TestPyPI verification and draft release assets.
 4. Publish the draft GitHub prerelease to approve PyPI publication.
