@@ -67,10 +67,12 @@ candidate workflow are green.
 
 ## Publish `0.7.0b1`
 
-Create a signed tag from the validated `main` commit:
+Create an annotated tag from the validated `main` commit. Preview tags may be
+unsigned because publishing is bound to this repository and workflow through
+OIDC. Require a verified signed tag before publishing a stable release:
 
 ```bash
-git tag -s v0.7.0b1 -m "BlueArch AWS Steward 0.7.0b1"
+git tag -a v0.7.0b1 -m "BlueArch AWS Steward 0.7.0b1"
 git push origin v0.7.0b1
 ```
 
