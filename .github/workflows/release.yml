@@ -1,4 +1,4 @@
-name: Publish preview
+name: Build preview candidate
 
 on:
   push:
@@ -43,7 +43,7 @@ jobs:
       - name: Run release gates
         run: make test quality security package-install-smoke
       - name: Create checksums
-        run: sha256sum dist/*.whl dist/*.tar.gz > SHA256SUMS
+        run: cd dist && sha256sum *.whl *.tar.gz > ../SHA256SUMS
       - name: Upload immutable release artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -60,9 +60,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/p/bluearch-aws-steward
     permissions:
       id-token: write
     steps:
@@ -117,41 +114,19 @@ jobs:
             UV_TOOL_BIN_DIR=/tmp/bluearch-steward-preview-bin \
             uv tool uninstall bluearch-aws-steward
 
-  publish-pypi:
-    name: Publish approved preview to PyPI
+  draft-github-prerelease:
+    name: Create draft GitHub prerelease
     needs: verify-testpypi
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment:
-      name: pypi
-      url: https://pypi.org/p/bluearch-aws-steward
-    permissions:
-      id-token: write
-    steps:
-      - name: Download the same validated distributions
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: python-distributions-${{ github.ref_name }}
-      - name: Publish with a short-lived OIDC credential
-        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
-        with:
-          packages-dir: dist/
-          attestations: true
-          skip-existing: false
-
-  github-prerelease:
-    name: Create GitHub prerelease
-    needs: publish-pypi
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
-      - name: Download published distributions
+      - name: Download TestPyPI-verified distributions
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-distributions-${{ github.ref_name }}
-      - name: Create immutable prerelease
+      - name: Create draft release for explicit approval
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -159,6 +134,7 @@ jobs:
             dist/*.whl dist/*.tar.gz SHA256SUMS \
             --repo "${GITHUB_REPOSITORY}" \
             --verify-tag \
+            --draft \
             --prerelease \
             --generate-notes \
             --title "BlueArch AWS Steward ${GITHUB_REF_NAME}"

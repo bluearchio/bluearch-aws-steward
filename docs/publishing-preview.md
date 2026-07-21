@@ -11,8 +11,8 @@ public and contain the packaged Python source.
 - The package version must exactly match the tag and must be a PEP 440 preview.
 - Pull requests, branch pushes, and manual workflow dispatch cannot publish.
 - TestPyPI and PyPI use short-lived GitHub OIDC credentials; no package token is stored.
-- PyPI receives the same artifact that passed tests and TestPyPI verification.
-- The `pypi` GitHub environment must require manual approval.
+- PyPI receives the checksummed artifacts that passed tests and TestPyPI verification.
+- PyPI publication requires a maintainer to publish the generated draft prerelease.
 - Existing PyPI versions are never overwritten or silently skipped.
 
 ## One-Time PyPI Configuration
@@ -27,29 +27,22 @@ On each index, create a pending GitHub Trusted Publisher with these values:
 | Project | `bluearch-aws-steward` | `bluearch-aws-steward` |
 | GitHub owner | `bluearchio` | `bluearchio` |
 | Repository | `bluearch-aws-steward` | `bluearch-aws-steward` |
-| Workflow | `release.yml` | `release.yml` |
-| Environment | `pypi` | `testpypi` |
+| Workflow | `publish-pypi.yml` | `release.yml` |
+| Environment | Leave blank | Leave blank |
 
 Do not create a PyPI API token for this workflow.
 
-## One-Time GitHub Configuration
+## Approval Boundary
 
-Create repository environments named exactly `testpypi` and `pypi`.
+Private repositories on the current GitHub plan do not provide environment
+reviewer protection. The release therefore uses a durable draft-release gate
+instead of silently weakening approval.
 
-For `testpypi`:
-
-- restrict deployment branches and tags to protected tags matching `v*`;
-- do not add package credentials or AWS credentials.
-
-For `pypi`:
-
-- restrict deployment branches and tags to protected tags matching `v*`;
-- require at least one trusted reviewer;
-- prevent self-review when another reviewer is available;
-- do not add package credentials or AWS credentials.
-
-The workflow requests `id-token: write` only inside the two package publishing
-jobs. The build job and the GitHub prerelease job cannot mint PyPI credentials.
+`release.yml` can publish only to TestPyPI and creates a draft prerelease. It
+cannot publish to PyPI. `publish-pypi.yml` runs only for a published prerelease,
+revalidates the tag against `main`, verifies every asset checksum, and then uses
+its own PyPI Trusted Publisher identity. Do not add package or AWS credentials
+to either workflow.
 
 ## Candidate Validation
 
@@ -86,12 +79,12 @@ The workflow will:
 1. build and validate the wheel and source distribution;
 2. publish them to TestPyPI;
 3. install the TestPyPI package with `uv tool` and run MCP smoke tests;
-4. pause at the protected `pypi` environment;
-5. publish the same files to PyPI after approval; and
-6. create a GitHub prerelease with checksums.
+4. create a draft GitHub prerelease containing the same files and checksums.
 
-Review the TestPyPI job before approving `pypi`. A waiting environment approval
-does not consume a running GitHub-hosted runner.
+Review the TestPyPI job, release notes, and attached checksums. Publishing the
+draft prerelease is the explicit approval that starts `publish-pypi.yml`. That
+workflow downloads the release assets, verifies their checksums, and publishes
+them to PyPI.
 
 ## Verify The Public Package
 

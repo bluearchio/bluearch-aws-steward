@@ -131,14 +131,14 @@ not upload to PyPI, create a GitHub release, or deploy artifacts.
 
 The separate `release.yml` workflow runs only for an explicit version tag. It
 publishes the validated artifacts to TestPyPI, installs and smoke-tests that
-upload, then waits for approval on the protected `pypi` environment before
-uploading the same artifacts to PyPI. Both package indexes use short-lived OIDC
-credentials, not stored API tokens.
+upload, then creates a draft GitHub prerelease containing the same artifacts
+and their checksums. A separate `publish-pypi.yml` workflow uploads those assets
+to PyPI only after a maintainer manually publishes the draft release. Both
+package indexes use short-lived OIDC credentials, not stored API tokens.
 
 Before public package publication, the remaining manual steps are:
 
 1. Configure pending Trusted Publishers for PyPI and TestPyPI.
-2. Create matching `pypi` and `testpypi` GitHub environments.
-3. Require a reviewer on the `pypi` environment.
-4. Push the signed `v0.7.0b1` tag only after the latest commit passes all gates.
-5. Approve production publication only after the TestPyPI installation passes.
+2. Push the signed `v0.7.0b1` tag only after the latest commit passes all gates.
+3. Review the TestPyPI verification and draft release assets.
+4. Publish the draft GitHub prerelease to approve PyPI publication.

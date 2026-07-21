@@ -21,7 +21,7 @@ as preview are not covered by a stable API compatibility promise.
 - Versioned `uvx` MCP configuration and release-candidate package validation.
 - Safe MCP client registration for Codex, Cursor, and Claude Code, including
   dry runs, backups, and targeted uninstall.
-- Tag-only Trusted Publishing through TestPyPI and an approved PyPI environment.
+- Tag-only TestPyPI publishing and draft-release-approved PyPI Trusted Publishing.
 
 ### Changed
 
