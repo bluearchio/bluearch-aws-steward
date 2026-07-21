@@ -16,7 +16,10 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("workflow_dispatch:", self.workflow)
         self.assertNotIn("pull_request:", self.workflow)
         self.assertIn("preview workflow refuses stable versions", self.workflow)
-        self.assertIn('git merge-base --is-ancestor "${GITHUB_SHA}" origin/main', self.workflow)
+        self.assertIn(
+            'gh api "repos/${GITHUB_REPOSITORY}/compare/${tagged_sha}...main"',
+            self.workflow,
+        )
         self.assertIn("--draft", self.workflow)
         self.assertNotIn("https://upload.pypi.org/legacy/", self.workflow)
 
@@ -29,6 +32,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
     def test_publish_jobs_use_oidc_without_repository_tokens(self) -> None:
         combined = self.workflow + self.publish_workflow
         self.assertEqual(combined.count("id-token: write"), 2)
+        self.assertEqual(combined.count("compare/${tagged_sha}...main"), 2)
+        self.assertNotIn("git fetch", combined)
         self.assertNotIn("PYPI_API_TOKEN", combined)
         self.assertNotIn("TWINE_PASSWORD", combined)
 

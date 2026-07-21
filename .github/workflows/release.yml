@@ -33,10 +33,15 @@ jobs:
         run: uv sync --extra tui --dev --no-editable --locked
       - name: Verify preview tag and package version
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main
+          tagged_sha="$(git rev-parse HEAD)"
+          comparison_status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${tagged_sha}...main" --jq '.status')"
+          case "${comparison_status}" in
+            ahead|identical) ;;
+            *) echo "Tagged commit is not on main (status: ${comparison_status})" >&2; exit 1 ;;
+          esac
           package_version="$(uv run --no-sync python -c 'from bluearch_aws_steward import __version__; print(__version__)')"
           test "${RELEASE_TAG}" = "v${package_version}"
           uv run --no-sync python -c 'from bluearch_aws_steward import __version__; assert any(marker in __version__ for marker in ("a", "b", "rc")), "preview workflow refuses stable versions"'
