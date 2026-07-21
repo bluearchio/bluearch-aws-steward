@@ -53,10 +53,9 @@ and a reviewed support and security process.
 - [x] Generate installed and exact-version `uvx` MCP configurations.
 - [x] Smoke-test the built wheel as an isolated `uv` tool.
 - [x] Add a validation-only release-candidate pipeline.
-- [x] Add tag-only TestPyPI/PyPI Trusted Publishing automation without stored tokens.
+- [x] Add tag-only TestPyPI and release-approved PyPI Trusted Publishing without stored tokens.
 - [x] Add safe MCP registration for Codex, Cursor, and Claude Code.
 - [ ] Reserve the PyPI project and configure pending Trusted Publishers.
-- [ ] Create protected `testpypi` and `pypi` GitHub environments.
 - [ ] Test a prerelease through TestPyPI.
 - [ ] Validate install, upgrade, and uninstall on macOS and Linux.
 - [ ] Add package provenance/SBOM and signed release attestations.

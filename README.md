@@ -84,9 +84,10 @@ bluearch-steward mcp config --runtime uvx
 ```
 
 The package is not published yet. The tag-only preview workflow builds and
-validates the exact distribution, publishes it to TestPyPI, waits for an
-approved `pypi` environment, and only then publishes to PyPI and creates a
-GitHub prerelease. Ordinary pushes and pull requests cannot publish packages.
+validates the exact distribution, publishes it to TestPyPI, and creates a draft
+GitHub prerelease. PyPI publication starts only when a maintainer manually
+publishes that draft release. Ordinary pushes and pull requests cannot publish
+packages.
 
 Until then, install a repository checkout:
 
