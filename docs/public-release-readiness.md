@@ -67,7 +67,8 @@ and a reviewed support and security process.
   documentation update.
 - Release-candidate validation is manual and must be started only for an actual
   preview or release decision.
-- Documentation-only changes skip CI and CodeQL.
+- Documentation-only changes run the lightweight required checks but never the
+  Docker-based LocalEmu workflow.
 - Every job has a short timeout, and concurrency cancellation stops superseded
   runs on the same branch.
 
