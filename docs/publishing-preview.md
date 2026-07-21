@@ -65,15 +65,15 @@ Run the manual `Release candidate validation` workflow on the same commit. Do
 not create the release tag until CI, CodeQL, LocalEmu MCP E2E, and the release
 candidate workflow are green.
 
-## Publish `0.7.0b3`
+## Publish `0.7.0b4`
 
 Create an annotated tag from the validated `main` commit. Preview tags may be
 unsigned because publishing is bound to this repository and workflow through
 OIDC. Require a verified signed tag before publishing a stable release:
 
 ```bash
-git tag -a v0.7.0b3 -m "BlueArch AWS Steward 0.7.0b3"
-git push origin v0.7.0b3
+git tag -a v0.7.0b4 -m "BlueArch AWS Steward 0.7.0b4"
+git push origin v0.7.0b4
 ```
 
 The workflow will:
@@ -93,7 +93,7 @@ them to PyPI.
 Use a machine or container without the repository checkout:
 
 ```bash
-uv tool install 'bluearch-aws-steward==0.7.0b3'
+uv tool install 'bluearch-aws-steward==0.7.0b4'
 bluearch-steward --version
 bluearch-steward mcp smoke
 bluearch-steward mcp install --client cursor --runtime installed --dry-run
@@ -113,7 +113,7 @@ If a published preview is broken:
 1. yank the affected PyPI release;
 2. document the reason in the changelog and GitHub release;
 3. fix and validate the issue on `main`; and
-4. publish the next preview, such as `0.7.0b4`.
+4. publish the next preview, such as `0.7.0b5`.
 
 Yanking discourages new automatic installations but does not remove files that
 existing users may already have downloaded.
