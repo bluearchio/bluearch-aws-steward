@@ -39,11 +39,11 @@ and a reviewed support and security process.
 ### 1. Source And CI Baseline
 
 - [x] Commit the `0.7.0` implementation locally with generated catalogs and IAM policy in sync.
-- [ ] Publish the validated clean-history root commit to the recreated repository.
-- [ ] Verify successful remote CI, CodeQL, LocalEmu E2E, and release-candidate validation runs.
+- [x] Publish the validated clean-history root commit to the recreated repository.
+- [x] Verify successful remote CI, CodeQL, LocalEmu E2E, and release-candidate validation runs.
 - [x] Keep Actions pinned to immutable commit SHAs.
-- [ ] Enable branch protection after the first green remote run.
-- [ ] Require pull requests and successful checks for future changes.
+- [x] Enable branch protection after the first green remote run.
+- [x] Require pull requests and successful checks for future changes.
 - [x] Group weekly Dependabot updates into at most one Python PR and one GitHub
   Actions PR per cycle.
 
@@ -71,6 +71,21 @@ and a reviewed support and security process.
   Docker-based LocalEmu workflow.
 - Every job has a short timeout, and concurrency cancellation stops superseded
   runs on the same branch.
+
+Remote evidence for the clean preview repository:
+
+- [`CI` on the final protected baseline](https://github.com/bluearchio/bluearch-aws-steward/actions/runs/29789166318)
+  passed Python 3.10, Python 3.13, quality, package, and security checks.
+- [`CodeQL` on the final protected baseline](https://github.com/bluearchio/bluearch-aws-steward/actions/runs/29789166328)
+  passed in private no-upload mode. It switches to GitHub code-scanning upload
+  when the repository becomes public.
+- [`CI` with LocalEmu MCP E2E](https://github.com/bluearchio/bluearch-aws-steward/actions/runs/29788373958)
+  passed against the clean source snapshot.
+- [Manual release-candidate validation](https://github.com/bluearchio/bluearch-aws-steward/actions/runs/29789052165)
+  passed package build, isolated install, MCP smoke, and the no-publish guard.
+- `main` requires pull requests, linear history, resolved conversations, and
+  the Python 3.10, Python 3.13, quality/package, and CodeQL checks. Force pushes
+  and branch deletion are disabled, including for administrators.
 
 ### 3. Recommendation Experience
 
@@ -129,7 +144,7 @@ contract identifiers and drift CI remain stable-release work.
 - [ ] Enable GitHub private vulnerability reporting and verify the response path.
 - [ ] Define supported versions, response SLA, release rollback, and revocation procedures.
 - [x] Run Gitleaks, detect-secrets, Bandit, and dependency-audit checks against
-  the clean public snapshot and its complete one-commit history.
+  the clean public snapshot and its complete clean history.
 
 The internal threat model is published in `security-threat-model.md`. The
 independent review remains intentionally open and cannot be self-certified.
