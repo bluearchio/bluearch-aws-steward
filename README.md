@@ -58,7 +58,7 @@ brew install uv
 The intended public installation is a persistent, isolated `uv` tool:
 
 ```bash
-uv tool install 'bluearch-aws-steward==0.7.0b1'
+uv tool install 'bluearch-aws-steward==0.7.0b2'
 uv tool update-shell
 bluearch-steward --version
 bluearch-steward mcp smoke
@@ -247,7 +247,7 @@ user flow is MCP.
 
 `bluearch_get_coverage` reports:
 
-| Measure | v0.7.0b1 |
+| Measure | v0.7.0b2 |
 | --- | ---: |
 | Catalog rules | 631 |
 | Native canonical rules | 100 |
@@ -276,7 +276,7 @@ rule list and evidence type.
 
 ## Release Status
 
-The current `0.7.0b1` work is a release candidate, not a published stable release.
+The current `0.7.0b2` work is a release candidate, not a published stable release.
 Public-preview and stable-release gates are tracked in
 [`docs/public-release-readiness.md`](docs/public-release-readiness.md). The
 planned progressive result experience is documented in

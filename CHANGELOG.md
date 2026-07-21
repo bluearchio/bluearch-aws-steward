@@ -7,6 +7,13 @@ as preview are not covered by a stable API compatibility promise.
 
 ## [Unreleased]
 
+## [0.7.0b2] - Preview candidate
+
+### Fixed
+
+- Release provenance checks now use the read-only GitHub compare API, allowing
+  private repositories to keep checkout credentials unpersisted.
+
 ## [0.7.0b1] - Preview candidate
 
 ### Added
