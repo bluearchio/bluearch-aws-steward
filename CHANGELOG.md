@@ -7,6 +7,13 @@ as preview are not covered by a stable API compatibility promise.
 
 ## [Unreleased]
 
+## [0.7.0b4] - Preview candidate
+
+### Changed
+
+- The MCP workflow is now a branded, CDN-hosted diagram that renders
+  consistently on GitHub and PyPI.
+
 ## [0.7.0b3] - Preview candidate
 
 ### Fixed

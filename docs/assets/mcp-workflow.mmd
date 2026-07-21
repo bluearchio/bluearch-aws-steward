@@ -1,0 +1,54 @@
+---
+config:
+  theme: base
+  themeCSS: ".nodeLabel, .edgeLabel, .cluster-label { font-family: Arial, sans-serif !important; }"
+  flowchart:
+    curve: basis
+    htmlLabels: true
+    nodeSpacing: 34
+    rankSpacing: 58
+  themeVariables:
+    background: "#FFFFFF"
+    fontFamily: "Inter, Arial, sans-serif"
+    fontSize: "16px"
+    lineColor: "#64748B"
+    primaryTextColor: "#172033"
+    clusterBkg: "#F8FAFC"
+    clusterBorder: "#CBD5E1"
+    edgeLabelBackground: "#FFFFFF"
+---
+flowchart LR
+    subgraph INTENT["1  Intent and context"]
+        direction TB
+        U["User intent"] --> C["MCP client"]
+        C --> A["bluearch_assess"]
+        A --> Q{"More context<br/>needed?"}
+        Q -->|Yes, clarify| C
+    end
+
+    subgraph ASSESS["2  Live read-only assessment"]
+        direction TB
+        Q -->|Ready| S["Live AWS reads"]
+        S --> R["Ephemeral snapshot"]
+        R --> X["Prioritized findings"]
+        X --> O["Summary, query,<br/>or report"]
+    end
+
+    subgraph REMEDIATE["3  Guarded remediation"]
+        direction TB
+        O -->|Plan| P["No-write plan"]
+        P --> G{"Exact plan<br/>approved?"}
+        G -->|No, revise| P
+        G -->|Yes| W["Revalidate and<br/>guarded write"]
+        W --> V["Fresh verification"]
+    end
+
+    classDef intent fill:#EAF2FF,stroke:#206CF5,color:#102A56,stroke-width:2px;
+    classDef assess fill:#ECFDF5,stroke:#059669,color:#064E3B,stroke-width:2px;
+    classDef remediate fill:#FFF7ED,stroke:#EA580C,color:#7C2D12,stroke-width:2px;
+    classDef decision fill:#FFFFFF,stroke:#475569,color:#172033,stroke-width:2px;
+
+    class U,C,A intent;
+    class S,R,X,O assess;
+    class P,W,V remediate;
+    class Q,G decision;
