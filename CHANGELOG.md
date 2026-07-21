@@ -7,6 +7,8 @@ as preview are not covered by a stable API compatibility promise.
 
 ## [Unreleased]
 
+## [0.7.0b1] - Preview candidate
+
 ### Added
 
 - A unified recommendation queue for native Steward, Prowler, Security Hub,
@@ -17,6 +19,9 @@ as preview are not covered by a stable API compatibility promise.
 - JSON, Markdown, HTML, CSV, SARIF, and PDF report exports.
 - Deterministic LocalEmu coverage and real stdio MCP validation.
 - Versioned `uvx` MCP configuration and release-candidate package validation.
+- Safe MCP client registration for Codex, Cursor, and Claude Code, including
+  dry runs, backups, and targeted uninstall.
+- Tag-only Trusted Publishing through TestPyPI and an approved PyPI environment.
 
 ### Changed
 
