@@ -190,6 +190,50 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     mcp_config.set_defaults(func=_mcp_config)
+    mcp_install = mcp_subparsers.add_parser(
+        "install", help="Register Steward with one or more supported MCP clients."
+    )
+    mcp_install.add_argument(
+        "--client",
+        action="append",
+        choices=["codex", "cursor", "claude", "all"],
+        required=True,
+        help="MCP client to configure. Repeat for multiple clients, or use all by itself.",
+    )
+    mcp_install.add_argument(
+        "--runtime",
+        choices=["installed", "uvx"],
+        default="installed",
+        help="Use the installed executable or an exact-version uvx runtime.",
+    )
+    mcp_install.add_argument(
+        "--dry-run", action="store_true", help="Show planned changes without writing configuration."
+    )
+    mcp_install.add_argument(
+        "--yes",
+        action="store_true",
+        help="Apply configuration without an interactive confirmation.",
+    )
+    mcp_install.set_defaults(func=_mcp_install)
+    mcp_uninstall = mcp_subparsers.add_parser(
+        "uninstall", help="Remove Steward from one or more supported MCP clients."
+    )
+    mcp_uninstall.add_argument(
+        "--client",
+        action="append",
+        choices=["codex", "cursor", "claude", "all"],
+        required=True,
+        help="MCP client to update. Repeat for multiple clients, or use all by itself.",
+    )
+    mcp_uninstall.add_argument(
+        "--dry-run", action="store_true", help="Show planned changes without writing configuration."
+    )
+    mcp_uninstall.add_argument(
+        "--yes",
+        action="store_true",
+        help="Apply configuration without an interactive confirmation.",
+    )
+    mcp_uninstall.set_defaults(func=_mcp_uninstall)
     mcp_tools = mcp_subparsers.add_parser(
         "tools", help="List available BlueArch Steward MCP tools."
     )
@@ -433,7 +477,7 @@ def _mcp_serve(args: argparse.Namespace) -> int:
 def _mcp_info(args: argparse.Namespace) -> int:
     print("BlueArch AWS Steward MCP")
     print("=" * 25)
-    print("MCP is for Codex, Cursor, Claude Desktop, VS Code, and other MCP clients.")
+    print("MCP is for Codex, Cursor, Claude Code, VS Code, and other MCP clients.")
     print()
     print("MCP clients launch `bluearch-steward-mcp` automatically.")
     print("It is a stdio server, not an interactive command.")
@@ -443,6 +487,7 @@ def _mcp_info(args: argparse.Namespace) -> int:
     print("  bluearch-steward mcp tools")
     print("  bluearch-steward mcp prompts")
     print("  bluearch-steward mcp config")
+    print("  bluearch-steward mcp install --client codex")
     print()
     print("Client command:")
     print("  bluearch-steward-mcp")
@@ -457,6 +502,55 @@ def _mcp_config(args: argparse.Namespace) -> int:
 
     print(json.dumps(mcp_client_config(runtime=args.runtime), indent=2, sort_keys=True))
     return 0
+
+
+def _mcp_install(args: argparse.Namespace) -> int:
+    from bluearch_aws_steward.mcp_install import install_mcp_clients, resolve_mcp_clients
+    from bluearch_aws_steward.mcp_server import mcp_client_config
+
+    clients = resolve_mcp_clients(args.client)
+    config = mcp_client_config(runtime=args.runtime)
+    if not _confirm_mcp_config_change("install", clients, args):
+        print("No MCP client configuration was changed.")
+        return 0
+    results = install_mcp_clients(clients, config, dry_run=args.dry_run)
+    _print_mcp_config_results(results)
+    if not args.dry_run:
+        print("Restart the configured MCP clients before using Steward.")
+    return 0
+
+
+def _mcp_uninstall(args: argparse.Namespace) -> int:
+    from bluearch_aws_steward.mcp_install import resolve_mcp_clients, uninstall_mcp_clients
+
+    clients = resolve_mcp_clients(args.client)
+    if not _confirm_mcp_config_change("uninstall", clients, args):
+        print("No MCP client configuration was changed.")
+        return 0
+    results = uninstall_mcp_clients(clients, dry_run=args.dry_run)
+    _print_mcp_config_results(results)
+    if not args.dry_run:
+        print("Restart the configured MCP clients to complete removal.")
+    return 0
+
+
+def _confirm_mcp_config_change(action: str, clients: List[str], args: argparse.Namespace) -> bool:
+    verb = "Install into" if action == "install" else "Remove from"
+    print(f"{verb}: {', '.join(clients)}")
+    if args.dry_run or args.yes:
+        return True
+    if not sys.stdin.isatty():
+        raise ValueError("Interactive confirmation is unavailable. Re-run with --yes or --dry-run.")
+    return input("Continue? [y/N] ").strip().lower() in {"y", "yes"}
+
+
+def _print_mcp_config_results(results: List[Dict[str, Any]]) -> None:
+    for result in results:
+        print(f"{result['client']:7} {result['status']:13} {result['config_path']}")
+        if result.get("command"):
+            print(f"        command: {result['command']}")
+        if result.get("backup_path"):
+            print(f"        backup:  {result['backup_path']}")
 
 
 def _mcp_tools(args: argparse.Namespace) -> int:
@@ -506,8 +600,8 @@ def _mcp_smoke(args: argparse.Namespace) -> int:
         print(f"  ok   {check}")
     print()
     print("Next:")
-    print("  bluearch-steward mcp config")
-    print("  Configure your MCP client with the JSON above.")
+    print("  bluearch-steward mcp install --client codex")
+    print("  Or run 'bluearch-steward mcp config' for manual setup.")
     return 0
 
 

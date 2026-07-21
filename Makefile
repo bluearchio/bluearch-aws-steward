@@ -58,6 +58,7 @@ package-install-smoke: package
 	/tmp/bluearch-steward-uv-bin/bluearch-steward --version
 	/tmp/bluearch-steward-uv-bin/bluearch-steward mcp smoke >/dev/null
 	/tmp/bluearch-steward-uv-bin/bluearch-steward mcp config --runtime installed >/dev/null
+	/tmp/bluearch-steward-uv-bin/bluearch-steward mcp install --client cursor --runtime installed --dry-run >/dev/null
 	UV_TOOL_DIR=/tmp/bluearch-steward-uv-tools UV_TOOL_BIN_DIR=/tmp/bluearch-steward-uv-bin $(UV) tool uninstall bluearch-aws-steward
 
 .PHONY: test

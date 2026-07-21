@@ -17,21 +17,31 @@ and `uv` can provide the compatible Python runtime required by Steward.
 Install Steward as an isolated persistent tool:
 
 ```bash
-uv tool install bluearch-aws-steward
+uv tool install 'bluearch-aws-steward==0.7.0b1'
 uv tool update-shell
 bluearch-steward --version
 bluearch-steward mcp smoke
 ```
 
-Generate MCP JSON that points to the installed environment:
+Register Steward with one or more supported MCP clients:
+
+```bash
+bluearch-steward mcp install --client codex
+bluearch-steward mcp install --client cursor
+bluearch-steward mcp install --client claude
+```
+
+Repeat `--client` to configure multiple clients, or use `--client all` to
+configure detected clients. Use `--dry-run` to inspect the exact path or native
+client command before changing anything. Steward backs up existing client
+configuration files and preserves unrelated MCP servers. Restart each client
+after changing MCP configuration.
+
+For an unsupported stdio MCP client, print the portable JSON instead:
 
 ```bash
 bluearch-steward mcp config --runtime installed
 ```
-
-Paste the generated `bluearch-aws-steward` server entry into Codex, Cursor,
-Claude Desktop, VS Code, or another stdio MCP client. Restart the client after
-changing MCP configuration.
 
 Steward does not start a separate HTTP service. The MCP client starts the stdio
 process when needed.
@@ -45,10 +55,10 @@ environment:
 bluearch-steward mcp config --runtime uvx
 ```
 
-For version `0.7.0`, the generated server executes the equivalent of:
+For preview version `0.7.0b1`, the generated server executes the equivalent of:
 
 ```bash
-uvx --from bluearch-aws-steward==0.7.0 bluearch-steward-mcp
+uvx --from bluearch-aws-steward==0.7.0b1 bluearch-steward-mcp
 ```
 
 Persistent `uv tool install` is the default recommendation because startup does
@@ -100,6 +110,12 @@ Restart MCP clients after every upgrade. Remove Steward with:
 uv tool uninstall bluearch-aws-steward
 ```
 
+Remove only Steward's MCP registration while preserving other MCP servers:
+
+```bash
+bluearch-steward mcp uninstall --client codex
+```
+
 ## Release Validation
 
 Maintainers validate the same package boundary without publishing anything:
@@ -113,10 +129,16 @@ distribution, installs the wheel as a `uv` tool, checks both entry points, runs
 the MCP smoke test, and verifies the version-pinned `uvx` configuration. It does
 not upload to PyPI, create a GitHub release, or deploy artifacts.
 
+The separate `release.yml` workflow runs only for an explicit version tag. It
+publishes the validated artifacts to TestPyPI, installs and smoke-tests that
+upload, then waits for approval on the protected `pypi` environment before
+uploading the same artifacts to PyPI. Both package indexes use short-lived OIDC
+credentials, not stored API tokens.
+
 Before public package publication, the remaining manual steps are:
 
-1. Reserve and verify the `bluearch-aws-steward` project on PyPI.
-2. Configure a protected `pypi` GitHub environment with trusted publishing.
-3. Test the workflow against TestPyPI from an explicit prerelease tag.
-4. Require an approved release environment for production publication.
-5. Publish a preview version before declaring a stable release.
+1. Configure pending Trusted Publishers for PyPI and TestPyPI.
+2. Create matching `pypi` and `testpypi` GitHub environments.
+3. Require a reviewer on the `pypi` environment.
+4. Push the signed `v0.7.0b1` tag only after the latest commit passes all gates.
+5. Approve production publication only after the TestPyPI installation passes.

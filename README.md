@@ -58,17 +58,23 @@ brew install uv
 The intended public installation is a persistent, isolated `uv` tool:
 
 ```bash
-uv tool install bluearch-aws-steward
+uv tool install 'bluearch-aws-steward==0.7.0b1'
 uv tool update-shell
 bluearch-steward --version
 bluearch-steward mcp smoke
 ```
 
-Then generate a stable MCP configuration for the installed tool:
+Register the installed runtime with one or more supported MCP clients:
 
 ```bash
-bluearch-steward mcp config --runtime installed
+bluearch-steward mcp install --client codex
+bluearch-steward mcp install --client cursor
+bluearch-steward mcp install --client claude
 ```
+
+Use `--dry-run` to preview changes. Existing client configuration is preserved,
+and changed configuration files are backed up before installation. Restart the
+client after registration.
 
 For clients that should resolve the exact released package on demand, generate
 a version-pinned `uvx` configuration:
@@ -77,10 +83,10 @@ a version-pinned `uvx` configuration:
 bluearch-steward mcp config --runtime uvx
 ```
 
-The package is not published yet. The release-candidate workflow validates this
-installation shape without publishing anything, but users can run these commands
-only after the first explicit PyPI release. No current workflow publishes a
-package or creates a GitHub release.
+The package is not published yet. The tag-only preview workflow builds and
+validates the exact distribution, publishes it to TestPyPI, waits for an
+approved `pypi` environment, and only then publishes to PyPI and creates a
+GitHub prerelease. Ordinary pushes and pull requests cannot publish packages.
 
 Until then, install a repository checkout:
 
@@ -115,7 +121,9 @@ checkout instead of allowing an MCP startup to mutate the environment; an
 already running Python process does not hot reload modules.
 
 See [`docs/public-installation.md`](docs/public-installation.md) for package,
-upgrade, uninstall, and MCP-client setup flows.
+upgrade, uninstall, and MCP-client setup flows. Maintainers should follow
+[`docs/publishing-preview.md`](docs/publishing-preview.md) for the guarded
+TestPyPI and PyPI release procedure.
 
 Verify the active runtime at any time:
 
@@ -238,7 +246,7 @@ user flow is MCP.
 
 `bluearch_get_coverage` reports:
 
-| Measure | v0.7.0 |
+| Measure | v0.7.0b1 |
 | --- | ---: |
 | Catalog rules | 631 |
 | Native canonical rules | 100 |
@@ -267,7 +275,7 @@ rule list and evidence type.
 
 ## Release Status
 
-The current `0.7.0` work is a release candidate, not a published stable release.
+The current `0.7.0b1` work is a release candidate, not a published stable release.
 Public-preview and stable-release gates are tracked in
 [`docs/public-release-readiness.md`](docs/public-release-readiness.md). The
 planned progressive result experience is documented in
