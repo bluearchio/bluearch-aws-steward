@@ -75,7 +75,7 @@ class McpProcess:
                 "params": {
                     "protocolVersion": "2025-06-18",
                     "capabilities": {},
-                    "clientInfo": {"name": "bluearch-emulator-e2e", "version": "0.7.0b2"},
+                    "clientInfo": {"name": "bluearch-emulator-e2e", "version": "0.7.0b3"},
                 },
             }
         )["result"]

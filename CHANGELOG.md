@@ -7,6 +7,13 @@ as preview are not covered by a stable API compatibility promise.
 
 ## [Unreleased]
 
+## [0.7.0b3] - Preview candidate
+
+### Fixed
+
+- TestPyPI verification installs the exact SHA-256-pinned wheel and resolves
+  dependencies only from PyPI, avoiding cross-index dependency confusion.
+
 ## [0.7.0b2] - Preview candidate
 
 ### Fixed
