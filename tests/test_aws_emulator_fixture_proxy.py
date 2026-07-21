@@ -25,6 +25,28 @@ FIXTURE_PROXY = _load_fixture_proxy()
 
 
 class FixtureProxyTests(unittest.TestCase):
+    def test_response_header_allowlist_rejects_injected_or_unknown_headers(self) -> None:
+        allowed = FIXTURE_PROXY._response_header_for_forwarding("content-type", "application/json")
+        injected = FIXTURE_PROXY._response_header_for_forwarding(
+            "content-type", "application/json\r\nX-Injected: true"
+        )
+        unknown = FIXTURE_PROXY._response_header_for_forwarding("x-untrusted", "value")
+
+        self.assertEqual(allowed, ("Content-Type", "application/json"))
+        self.assertIsNone(injected)
+        self.assertIsNone(unknown)
+
+    def test_xml_parser_rejects_entity_expansion(self) -> None:
+        payload = b'<!DOCTYPE root [<!ENTITY repeated "expanded">]><root>&repeated;</root>'
+
+        self.assertIsNone(FIXTURE_PROXY._parse_xml(payload))
+
+    def test_xml_parser_accepts_normal_fixture_payload(self) -> None:
+        root = FIXTURE_PROXY._parse_xml(b"<root><value>safe</value></root>")
+
+        self.assertIsNotNone(root)
+        self.assertEqual(root.findtext("value"), "safe")
+
     def test_serves_live_recommendation_source_fixtures(self) -> None:
         security_hub = json.loads(
             FIXTURE_PROXY.fixture_signal_response("AWSSecurityHub_20180626.GetFindings")
