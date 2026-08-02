@@ -41,6 +41,7 @@ def main() -> int:
         findings,
         expected.get("expected_rule_ids"),
         all_active=bool(expected.get("expected_all_active_rules")),
+        active_services=expected.get("expected_active_rule_services"),
     )
     _assert_expected_summary(actual.get("summary") or {}, expected.get("expected_summary") or {})
     _assert_expected_summary_minimum(
@@ -133,12 +134,20 @@ def _nested_value(value: Any, path: str) -> Any:
 
 
 def _assert_expected_rule_ids(
-    findings: List[Dict[str, Any]], expected_rule_ids: Any, *, all_active: bool = False
+    findings: List[Dict[str, Any]],
+    expected_rule_ids: Any,
+    *,
+    all_active: bool = False,
+    active_services: Any = None,
 ) -> None:
     if expected_rule_ids is None and not all_active:
         return
     actual = {str(finding.get("rule_id")) for finding in findings}
-    expected = _active_rule_ids() if all_active else {str(rule_id) for rule_id in expected_rule_ids}
+    expected = (
+        _active_rule_ids(active_services)
+        if all_active
+        else {str(rule_id) for rule_id in expected_rule_ids}
+    )
     if actual != expected:
         _fail(
             "Finding rule coverage mismatch: "
@@ -173,12 +182,17 @@ def _assert_expected_summary_minimum(
         )
 
 
-def _active_rule_ids() -> set[str]:
+def _active_rule_ids(services: Any = None) -> set[str]:
     catalog = (
         Path(__file__).resolve().parents[3] / "bluearch_aws_steward" / "catalog" / "rules.json"
     )
     payload = _load_json(catalog)
-    return {str(rule["id"]) for rule in payload.get("rules", [])}
+    allowed = {str(service) for service in services} if isinstance(services, list) else None
+    return {
+        str(rule["id"])
+        for rule in payload.get("rules", [])
+        if allowed is None or str(rule.get("service")) in allowed
+    }
 
 
 def _assert_clean_resources(

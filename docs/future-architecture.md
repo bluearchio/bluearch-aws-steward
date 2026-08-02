@@ -240,7 +240,7 @@ bluearch_aws_steward/catalog/full_rules.json
 bluearch_aws_steward/catalog/rules.json
 ```
 
-`full_rules.json` contains all 631 source rows across 47 catalog service groups.
+`full_rules.json` contains all 649 source rows across 48 catalog service groups.
 Each row has an evaluation object owned by Steward, not the source catalog:
 
 | Mode | Rules | Runtime meaning |
@@ -263,7 +263,7 @@ That bundle is marked with:
 }
 ```
 
-Today it contains 100 canonical executable rules across 16 runtime scopes.
+Today it contains 120 canonical executable rules across 17 runtime scopes.
 Aliases for EBS and networking route to the EC2 collector without increasing
 that count. The authoritative rule list, IDs, thresholds, capabilities, and
 test ownership are maintained in `docs/rule-coverage.md`.
@@ -412,10 +412,10 @@ Steward should follow strict write-safety rules:
 - Implemented: resumable profile, region, and SSO authentication requests before scans.
 - Implemented: structured MCP results alongside serialized JSON compatibility output.
 - Implemented: status, results, resource details, coverage, and readiness tools.
-- Implemented: complete 631-rule knowledge registry with explicit evaluation modes.
+- Implemented: complete 649-rule knowledge registry with explicit evaluation modes.
 - Implemented: scan-level detection coverage that prevents false clean claims.
 - Keep `bluearch_advise` for synchronous compatibility.
-- Keep the 100-rule free baseline across 16 runtime scopes executable.
+- Keep the 120-rule free baseline across 17 runtime scopes executable.
 - Preserve LocalEmu and real AWS fixture coverage.
 - Make MCP docs and plugin install flow reliable.
 
@@ -434,7 +434,7 @@ Current status: implemented for the AWS CLI and AWS SDK providers.
 
 ### Phase 3: Multi-Service Rules
 
-Current status: 100 canonical rules across 16 service scopes implemented.
+Current status: 120 canonical rules across 17 service scopes implemented.
 
 - Implemented: unattached and unencrypted EBS detection plus unassociated Elastic IP detection.
 - Implemented: CloudWatch Logs groups without retention policies.

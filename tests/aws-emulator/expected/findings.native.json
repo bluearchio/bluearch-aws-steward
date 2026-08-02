@@ -1,6 +1,24 @@
 {
-  "fixture_set": "aws-emulator-all-active-rules",
+  "fixture_set": "aws-emulator-all-aws-only-active-rules",
   "expected_all_active_rules": true,
+  "expected_active_rule_services": [
+    "alb",
+    "api-gateway",
+    "cloudtrail",
+    "cloudwatch",
+    "dynamodb",
+    "ec2",
+    "ecs",
+    "efs",
+    "iam",
+    "kms",
+    "lambda",
+    "rds",
+    "s3",
+    "secrets-manager",
+    "sns",
+    "sqs"
+  ],
   "allow_additional_findings": true,
   "expected_summary": {
     "detection_coverage.automated_rules_evaluated": 100,

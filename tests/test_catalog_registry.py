@@ -13,25 +13,25 @@ class CatalogRegistryTests(unittest.TestCase):
     def test_bundled_registry_contains_every_source_rule(self) -> None:
         rules = load_catalog_rules()
 
-        self.assertEqual(len(rules), 631)
-        self.assertEqual(len({rule["id"] for rule in rules}), 631)
+        self.assertEqual(len(rules), 649)
+        self.assertEqual(len({rule["id"] for rule in rules}), 649)
         self.assertTrue(all(rule.get("evaluation") for rule in rules))
 
     def test_registry_exposes_honest_evaluation_modes(self) -> None:
         coverage = catalog_coverage()
 
-        self.assertEqual(coverage["catalog_rule_count"], 631)
-        self.assertEqual(coverage["automated_rule_count"], 100)
-        self.assertEqual(coverage["unevaluated_rule_count"], 531)
+        self.assertEqual(coverage["catalog_rule_count"], 649)
+        self.assertEqual(coverage["automated_rule_count"], 120)
+        self.assertEqual(coverage["unevaluated_rule_count"], 529)
         self.assertEqual(
             coverage["rules_by_evaluation_mode"],
             {
-                "native": 100,
+                "native": 120,
                 "native_alias": 7,
                 "manual_review": 117,
                 "metadata_required": 191,
                 "signal_required": 5,
-                "specification_required": 211,
+                "specification_required": 209,
             },
         )
 
@@ -45,17 +45,17 @@ class CatalogRegistryTests(unittest.TestCase):
     def test_automated_filter_returns_only_native_rules(self) -> None:
         rules = search_catalog_rules(automated_only=True)
 
-        self.assertEqual(len(rules), 100)
+        self.assertEqual(len(rules), 120)
         self.assertTrue(all(rule["evaluation"]["mode"] == "native" for rule in rules))
         self.assertTrue(
             all(rule["evaluation"].get("access_tier") in {"free", "premium"} for rule in rules)
         )
 
-    def test_open_source_rule_baseline_is_exactly_one_hundred_free_rules(self) -> None:
+    def test_open_source_rule_baseline_contains_all_native_rules(self) -> None:
         rules = search_catalog_rules(automated_only=True)
         free_rules = [rule for rule in rules if rule["evaluation"].get("access_tier") == "free"]
 
-        self.assertEqual(len(free_rules), 100)
+        self.assertEqual(len(free_rules), 120)
         self.assertGreaterEqual(len(rules), len(free_rules))
 
 

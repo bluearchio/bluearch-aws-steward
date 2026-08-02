@@ -1,9 +1,9 @@
 # Native Rule Coverage
 
-BlueArch AWS Steward v0.7.0b4 contains 100 canonical native rules across 16
+BlueArch AWS Steward v0.8.0b1 contains 120 canonical native rules across 17
 runtime scopes. Aliases are routing conveniences and do not increase this
-count. The complete knowledge catalog contains 631 entries; therefore native
-automation coverage is 15.85%. All 100 rules are in the open-source `free`
+count. The complete knowledge catalog contains 649 entries; therefore native
+automation coverage is 18.49%. All 120 rules are in the open-source `free`
 access tier; future canonical additions after this baseline default to
 `premium` unless project governance promotes them.
 
@@ -180,6 +180,39 @@ detector never reads message bodies.
 API Gateway findings expose API, stage, path, method, and control state only.
 They do not return request payloads, integration credentials, or templates.
 
+## EKS And Kubernetes (20)
+
+- `eks-public-endpoint-open`
+- `eks-private-endpoint-disabled`
+- `eks-control-plane-logging-incomplete`
+- `eks-version-support-risk`
+- `eks-guardduty-runtime-monitoring-disabled`
+- `eks-nodegroup-version-skew`
+- `eks-nodegroup-ami-outdated`
+- `eks-nodegroup-health-degraded`
+- `eks-managed-addon-unhealthy`
+- `eks-managed-addon-update-available`
+- `k8s-workload-missing-resource-requests`
+- `k8s-workload-missing-memory-limit`
+- `k8s-workload-missing-probes`
+- `k8s-workload-disruption-unprotected`
+- `k8s-workload-dangerous-privileges`
+- `k8s-pod-restart-loop`
+- `k8s-pod-unschedulable`
+- `k8s-pod-cpu-limit-pressure`
+- `k8s-pod-memory-pressure`
+- `eks-workload-overprovisioned`
+
+EKS control-plane, node-group, add-on, GuardDuty, and SSM evidence is correlated
+with allowlisted Kubernetes nodes, workloads, pods, Services, PDBs, HPAs,
+ingresses, and events. Steward never reads Secrets, pod logs, exec sessions,
+proxies, or port forwards. An explicit `eks_cluster_name` binds the selected
+kubeconfig context to the endpoint and CA returned by `eks:DescribeCluster`.
+CPU and memory pressure use live Container Insights data; only the deterministic
+14-day overprovisioning history can use a file and is labeled
+`synthetic_historical_validation`. EKS and Kubernetes remediation remains
+planning-only.
+
 ## Thresholds
 
 | Rule family | Default |
@@ -203,10 +236,18 @@ unknown and suppress the finding; they are never interpreted as zero.
 
 ## Test Ownership
 
-- All 100 rules require at least one positive resource proof against LocalEmu
-  1.1.0 through both the AWS SDK and AWS CLI providers.
-- The real stdio MCP E2E requires the same 100 rule IDs and proves `assess ->
+- The 100 AWS-only rules require at least one positive resource proof against
+  LocalEmu 1.1.0 through both the AWS SDK and AWS CLI providers.
+- The AWS-only real stdio MCP E2E requires the same 100 rule IDs and proves `assess ->
   status -> partial results -> final results -> plan -> verify` without writes.
+- The 20 EKS/Kubernetes rules use the hybrid LocalEmu plus `kind` lab. Every
+  rule must detect its vulnerable fixture, ignore its healthy counterpart, and
+  complete a live MCP investigation with expected inside-cluster evidence and
+  zero writes.
+- The manual AWS parity gate uses distinct vulnerable and healthy EKS clusters,
+  a wheel-installed stdio MCP runtime, access-entry/RBAC validation, real
+  Container Insights metrics, CloudTrail and Kubernetes audit logs, and mandatory
+  cleanup. AWS responses are never replaced by mocks in this gate.
 - Eighty-eight rules are backed only by LocalEmu resources and metric datapoints.
 - Twelve rules use a loopback-only fixture response overlay for state no public
   create API can set or behavior LocalEmu cannot preserve accurately: root-key
@@ -218,4 +259,7 @@ unknown and suppress the finding; they are never interpreted as zero.
   remain responsible for real-service parity.
 
 See [`../tests/aws-emulator/rule-map.yml`](../tests/aws-emulator/rule-map.yml) for
-the rule-by-rule assignment.
+the AWS-only rule assignment and [`../tests/eks-lab/README.md`](../tests/eks-lab/README.md)
+for the EKS Product Pack functional contract.
+See [`../tests/aws-eks-live/README.md`](../tests/aws-eks-live/README.md) for the
+billable sandbox parity gate.

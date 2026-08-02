@@ -150,6 +150,7 @@ class ExtendedServiceDetectorTests(unittest.TestCase):
                 "rds",
                 "lambda",
                 "ecs",
+                "eks",
                 "alb",
                 "kms",
                 "secrets-manager",

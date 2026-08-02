@@ -1,0 +1,12 @@
+{
+  "clusters": {
+    "bluearch-eks-vulnerable": {"context": "kind-bluearch-eks-lab"},
+    "bluearch-eks-healthy": {"context": "kind-bluearch-eks-lab"}
+  },
+  "nodegroups": {
+    "healthy-ng": ["bluearch-eks-lab-control-plane"],
+    "skew-ng": ["bluearch-eks-lab-worker"],
+    "old-ami-ng": ["bluearch-eks-lab-worker2"],
+    "degraded-ng": ["bluearch-eks-lab-worker3"]
+  }
+}

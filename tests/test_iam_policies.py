@@ -31,6 +31,19 @@ class IamPolicyTests(unittest.TestCase):
             "elasticloadbalancing:ModifyLoadBalancerAttributes",
             remediation_actions(),
         )
+        read_policy = generated_policies()[
+            next(path for path in generated_policies() if path.name == "read-policy.json")
+        ]
+        ssm_statement = next(
+            statement
+            for statement in read_policy["Statement"]
+            if statement["Sid"] == "BlueArchStewardReadEksAmiMetadata"
+        )
+        self.assertEqual(ssm_statement["Action"], ["ssm:GetParameter"])
+        self.assertEqual(
+            ssm_statement["Resource"],
+            "arn:aws:ssm:*::parameter/aws/service/eks/optimized-ami/*",
+        )
         self.assertEqual(len(generated_policies()), 2)
 
 

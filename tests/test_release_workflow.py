@@ -7,9 +7,51 @@ from pathlib import Path
 
 class ReleaseWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
-        workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+        root = Path(__file__).resolve().parents[1]
+        workflows = root / ".github" / "workflows"
+        self.readme = (root / "README.md").read_text(encoding="utf-8")
+        self.package_readme = (root / "PYPI_README.md").read_text(encoding="utf-8")
+        self.pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+        self.public_installation = (root / "docs" / "public-installation.md").read_text(
+            encoding="utf-8"
+        )
+        self.ci_workflow = (workflows / "ci.yml").read_text(encoding="utf-8")
         self.workflow = (workflows / "release.yml").read_text(encoding="utf-8")
         self.publish_workflow = (workflows / "publish-pypi.yml").read_text(encoding="utf-8")
+
+    def test_public_docs_lead_with_complete_plain_pip_install(self) -> None:
+        combined = self.readme + self.public_installation
+        self.assertIn("python -m pip install --upgrade bluearch-aws-steward", combined)
+        self.assertIn("EKS and Kubernetes support is included", combined)
+        self.assertNotIn("bluearch-aws-steward[eks]", combined)
+        self.assertNotIn("The package is not published yet", combined)
+
+    def test_pypi_description_is_a_short_public_quickstart(self) -> None:
+        self.assertIn('readme = "PYPI_README.md"', self.pyproject)
+        self.assertLessEqual(len(self.package_readme.splitlines()), 160)
+        self.assertIn("pip install --upgrade bluearch-aws-steward", self.package_readme)
+        self.assertIn("bluearch-steward mcp install --client codex", self.package_readme)
+        self.assertIn("EKS and Kubernetes support is included", self.package_readme)
+
+    def test_ci_validates_plain_pip_install_on_every_supported_python(self) -> None:
+        self.assertIn(
+            'python-version: ["3.10", "3.11", "3.12", "3.13"]',
+            self.ci_workflow,
+        )
+        self.assertIn("name: Plain pip install", self.ci_workflow)
+        self.assertIn(
+            "python -m pip install --disable-pip-version-check dist/*.whl", self.ci_workflow
+        )
+        self.assertIn('python -c "import kubernetes"', self.ci_workflow)
+        self.assertIn("bluearch-steward mcp smoke", self.ci_workflow)
+        self.assertRegex(
+            self.ci_workflow,
+            r"uses: actions/upload-artifact@[0-9a-f]{40}",
+        )
+        self.assertRegex(
+            self.ci_workflow,
+            r"uses: actions/download-artifact@[0-9a-f]{40}",
+        )
 
     def test_publication_is_tag_only(self) -> None:
         self.assertIn('      - "v*"', self.workflow)

@@ -18,6 +18,7 @@ from bluearch_aws_steward.detectors.dynamodb import scan_dynamodb
 from bluearch_aws_steward.detectors.ec2 import scan_ec2
 from bluearch_aws_steward.detectors.ecs import scan_ecs
 from bluearch_aws_steward.detectors.efs import scan_efs
+from bluearch_aws_steward.detectors.eks import scan_eks
 from bluearch_aws_steward.detectors.iam import scan_iam
 from bluearch_aws_steward.detectors.kms import scan_kms
 from bluearch_aws_steward.detectors.lambda_service import scan_lambda
@@ -29,6 +30,7 @@ from bluearch_aws_steward.detectors.sqs import scan_sqs
 from bluearch_aws_steward.models import ScanResult, utc_now_iso
 from bluearch_aws_steward.policy import ScanPolicy
 from bluearch_aws_steward.providers.base import AwsProvider, AwsProviderError
+from bluearch_aws_steward.providers.kubernetes import KubernetesProvider
 
 Scanner = Callable[..., ScanResult]
 
@@ -39,6 +41,7 @@ class CollectorSpec:
     scanner: Scanner
     accepts_bucket_prefix: bool = False
     accepts_policy: bool = False
+    accepts_kubernetes: bool = False
     aliases: Tuple[str, ...] = ()
 
 
@@ -52,6 +55,7 @@ COLLECTORS: Dict[str, CollectorSpec] = {
     "rds": CollectorSpec("rds", scan_rds, accepts_policy=True),
     "lambda": CollectorSpec("lambda", scan_lambda, accepts_policy=True),
     "efs": CollectorSpec("efs", scan_efs, accepts_policy=True),
+    "eks": CollectorSpec("eks", scan_eks, accepts_policy=True, accepts_kubernetes=True),
     "ecs": CollectorSpec("ecs", scan_ecs, accepts_policy=True),
     "alb": CollectorSpec("alb", scan_alb, accepts_policy=True),
     "kms": CollectorSpec("kms", scan_kms, accepts_policy=True),
@@ -80,6 +84,15 @@ def run_aws_scan(
     bucket_prefix: str | None = None,
     rule_filter: str | None = None,
     policy: ScanPolicy | None = None,
+    kubernetes_provider: KubernetesProvider | None = None,
+    kubeconfig: str | None = None,
+    kubernetes_context: str | None = None,
+    kubernetes_namespaces: Tuple[str, ...] | None = None,
+    kubernetes_excluded_namespaces: Tuple[str, ...] | None = None,
+    kubernetes_metrics_file: str | None = None,
+    kubernetes_metrics_source: str = "auto",
+    eks_fixture_map: str | None = None,
+    eks_cluster_name: str | None = None,
     progress_callback: Callable[[Dict[str, object]], None] | None = None,
     partial_callback: Callable[[ScanResult], None] | None = None,
     cancel_event: Event | None = None,
@@ -114,6 +127,15 @@ def run_aws_scan(
             bucket_prefix=bucket_prefix,
             rule_filter=rule_filter,
             policy=policy,
+            kubernetes_provider=kubernetes_provider,
+            kubeconfig=kubeconfig,
+            kubernetes_context=kubernetes_context,
+            kubernetes_namespaces=kubernetes_namespaces,
+            kubernetes_excluded_namespaces=kubernetes_excluded_namespaces,
+            kubernetes_metrics_file=kubernetes_metrics_file,
+            kubernetes_metrics_source=kubernetes_metrics_source,
+            eks_fixture_map=eks_fixture_map,
+            eks_cluster_name=eks_cluster_name,
         )
         result.summary["policy_overrides"] = policy.to_dict() if policy else {}
         _add_detection_coverage(result, requested_service, services, rule_filter)
@@ -158,6 +180,15 @@ def run_aws_scan(
                     bucket_prefix=bucket_prefix,
                     rule_filter=rule_filter,
                     policy=policy,
+                    kubernetes_provider=kubernetes_provider,
+                    kubeconfig=kubeconfig,
+                    kubernetes_context=kubernetes_context,
+                    kubernetes_namespaces=kubernetes_namespaces,
+                    kubernetes_excluded_namespaces=kubernetes_excluded_namespaces,
+                    kubernetes_metrics_file=kubernetes_metrics_file,
+                    kubernetes_metrics_source=kubernetes_metrics_source,
+                    eks_fixture_map=eks_fixture_map,
+                    eks_cluster_name=eks_cluster_name,
                 )
             ] = selected_service
 
@@ -379,6 +410,19 @@ def _scan_one(service: str, client: AwsProvider, **kwargs: object) -> ScanResult
         kwargs.pop("bucket_prefix", None)
     if not collector.accepts_policy:
         kwargs.pop("policy", None)
+    if not collector.accepts_kubernetes:
+        for key in (
+            "kubernetes_provider",
+            "kubeconfig",
+            "kubernetes_context",
+            "kubernetes_namespaces",
+            "kubernetes_excluded_namespaces",
+            "kubernetes_metrics_file",
+            "kubernetes_metrics_source",
+            "eks_fixture_map",
+            "eks_cluster_name",
+        ):
+            kwargs.pop(key, None)
     return collector.scanner(client, **kwargs)
 
 

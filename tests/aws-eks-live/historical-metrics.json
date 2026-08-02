@@ -1,0 +1,37 @@
+{
+  "pods": {},
+  "workloads": {
+    "bluearch-eks-lab/overprovisioned-api": {
+      "lookback_days": 14,
+      "completeness_percent": 100,
+      "estimated_monthly_savings_usd": 18.4,
+      "savings_confidence": "high",
+      "containers": {
+        "app": {
+          "cpu_p95_millicores": 50,
+          "memory_p95_bytes": 67108864
+        }
+      }
+    },
+    "bluearch-eks-lab/runtime-healthy-api": {
+      "lookback_days": 14,
+      "completeness_percent": 100,
+      "containers": {
+        "app": {
+          "cpu_p95_millicores": 220,
+          "memory_p95_bytes": 100663296
+        }
+      }
+    },
+    "bluearch-eks-healthy/healthy-api": {
+      "lookback_days": 14,
+      "completeness_percent": 100,
+      "containers": {
+        "app": {
+          "cpu_p95_millicores": 45,
+          "memory_p95_bytes": 29360128
+        }
+      }
+    }
+  }
+}

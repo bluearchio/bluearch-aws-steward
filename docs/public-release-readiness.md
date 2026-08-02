@@ -49,9 +49,10 @@ and a reviewed support and security process.
 
 ### 2. Public Distribution
 
-- [x] Define `uv tool install bluearch-aws-steward` as the primary install path.
+- [x] Define complete `pip install` and isolated `uv tool install` paths.
 - [x] Generate installed and exact-version `uvx` MCP configurations.
 - [x] Smoke-test the built wheel as an isolated `uv` tool.
+- [x] Validate plain wheel installation on Python 3.10 through 3.13 in CI.
 - [x] Add a validation-only release-candidate pipeline.
 - [x] Add tag-only TestPyPI and release-approved PyPI Trusted Publishing without stored tokens.
 - [x] Add safe MCP registration for Codex, Cursor, and Claude Code.
@@ -120,7 +121,19 @@ Remote evidence for the clean preview repository:
 ### 6. Remediation And IaC
 
 - [ ] Map findings to CloudFormation, Terraform, CDK, or source ownership evidence.
-- [ ] Generate a patch and tests before considering a live AWS write.
+- [x] Add read-only deletion-readiness dossiers for unattached EBS volumes,
+  unassociated Elastic IPs, inactive ECS task definitions, inactive EFS file
+  systems, unused Lambda functions, and idle RDS instances with live revalidation, direct
+  dependencies, recovery evidence, business tags, optional AWS Config
+  relationships, explicit unknowns, and no delete capability.
+- [x] Add operational-diagnosis dossiers for RDS CPU, rightsizing, read-scaling,
+  and exposure findings plus ECS health, platform, and unsafe task-definition
+  findings, with hypotheses explicitly separated from confirmed root cause.
+- [x] Add the hybrid LocalEmu plus `kind` EKS investigation fixture pack and
+  promote reviewed EKS/Kubernetes rules into the native catalog.
+- [ ] Expand service-specific deletion investigation beyond the initial six rules.
+- [x] Generate and locally validate planning-only Terraform, CloudFormation,
+  eksctl, Kubernetes YAML, Helm, and Kustomize patch fragments for the EKS pack.
 - [ ] Require per-plan user approval; never batch-approve destructive changes.
 - [ ] Keep deletes, traffic changes, credential rotation, and migrations planning-only.
 - [ ] Add post-change verification and rollback evidence to reports.

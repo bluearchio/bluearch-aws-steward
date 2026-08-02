@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import email.parser
 import os
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -17,6 +19,23 @@ def main() -> int:
     wheel = args.wheel.resolve()
     if not wheel.is_file():
         parser.error(f"wheel does not exist: {wheel}")
+
+    with zipfile.ZipFile(wheel) as archive:
+        metadata_path = next(
+            name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+        )
+        metadata = email.parser.Parser().parsestr(archive.read(metadata_path).decode("utf-8"))
+    requirements = metadata.get_all("Requires-Dist", [])
+    for package_name in ("kubernetes", "pyyaml"):
+        matching = [
+            requirement
+            for requirement in requirements
+            if requirement.lower().startswith(package_name)
+        ]
+        if not matching:
+            raise RuntimeError(f"wheel is missing the {package_name} runtime dependency")
+        if all("extra ==" in requirement.lower() for requirement in matching):
+            raise RuntimeError(f"{package_name} must be a base dependency, not an optional extra")
 
     temp_root = os.environ.get("STEWARD_TEST_TMPDIR", "/tmp")
     with tempfile.TemporaryDirectory(prefix="bluearch-steward-wheel-", dir=temp_root) as temp_dir:

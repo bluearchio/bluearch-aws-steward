@@ -5,6 +5,7 @@ import argparse
 import json
 import secrets
 import subprocess
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -13,11 +14,19 @@ from typing import Any, Callable, Dict, Iterable, List
 import boto3
 from botocore.exceptions import ClientError
 
-from bluearch_aws_steward.aws_endpoints import is_loopback_aws_endpoint
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from bluearch_aws_steward.aws_endpoints import is_loopback_aws_endpoint  # noqa: E402
 
 ACCOUNT_ID = "000000000000"
 REGION = "us-east-1"
 FIXTURE_TAG = "bluearch-steward-fixture"
+BUSYBOX_IMAGE = (
+    "public.ecr.aws/docker/library/busybox@sha256:"
+    "b7f3d86d6e84fc17718c48bcde1450807faa2d56704205c697b4bd5df7b9e29f"  # pragma: allowlist secret
+)
 
 
 class FixtureError(RuntimeError):
@@ -85,6 +94,14 @@ class ExtendedFixtures:
     @property
     def ecs_service(self) -> str:
         return f"{self.prefix}-outdated"
+
+    @property
+    def ecs_healthy_family(self) -> str:
+        return f"{self.prefix}-healthy"
+
+    @property
+    def ecs_healthy_service(self) -> str:
+        return f"{self.prefix}-healthy"
 
     @property
     def admin_lambda(self) -> str:
@@ -891,7 +908,7 @@ class ExtendedFixtures:
             containerDefinitions=[
                 {
                     "name": "fixture",
-                    "image": "public.ecr.aws/docker/library/busybox:latest",
+                    "image": BUSYBOX_IMAGE,
                     "essential": True,
                     "privileged": True,
                     "environment": [{"name": "API_TOKEN", "value": "fixture-only-value"}],
@@ -919,6 +936,44 @@ class ExtendedFixtures:
             },
             tags=[{"key": FIXTURE_TAG, "value": "ecs-outdated"}],
         )
+        healthy_task = ecs.register_task_definition(
+            family=self.ecs_healthy_family,
+            networkMode="awsvpc",
+            requiresCompatibilities=["FARGATE"],
+            cpu="256",
+            memory="512",
+            containerDefinitions=[
+                {
+                    "name": "healthy-fixture",
+                    "image": BUSYBOX_IMAGE,
+                    "command": ["sh", "-c", "sleep 3600"],
+                    "essential": True,
+                    "privileged": False,
+                }
+            ],
+            tags=[{"key": FIXTURE_TAG, "value": "ecs-healthy"}],
+        )["taskDefinition"]
+        ecs.create_service(
+            cluster=self.ecs_cluster,
+            serviceName=self.ecs_healthy_service,
+            taskDefinition=healthy_task["taskDefinitionArn"],
+            desiredCount=1,
+            launchType="FARGATE",
+            platformVersion="LATEST",
+            networkConfiguration={
+                "awsvpcConfiguration": {
+                    "subnets": [network["subnet_ids"][0]],
+                    "securityGroups": [network["default_security_group_id"]],
+                    "assignPublicIp": "DISABLED",
+                }
+            },
+            tags=[{"key": FIXTURE_TAG, "value": "ecs-healthy"}],
+        )
+        self._wait_for(
+            lambda: self._ecs_task_is_running(self.ecs_healthy_family),
+            "healthy ECS service task",
+            timeout=45,
+        )
         inactive = ecs.register_task_definition(
             family=f"{self.ecs_family}-inactive",
             networkMode="awsvpc",
@@ -928,7 +983,7 @@ class ExtendedFixtures:
             containerDefinitions=[
                 {
                     "name": "inactive-fixture",
-                    "image": "public.ecr.aws/docker/library/busybox:latest",
+                    "image": BUSYBOX_IMAGE,
                     "essential": True,
                 }
             ],
@@ -1373,10 +1428,11 @@ class ExtendedFixtures:
 
     def _reset_ecs(self) -> None:
         ecs = self.client("ecs")
-        try:
-            ecs.delete_service(cluster=self.ecs_cluster, service=self.ecs_service, force=True)
-        except ClientError as exc:
-            self._ignore(exc, "ClusterNotFoundException", "ServiceNotFoundException")
+        for service_name in (self.ecs_service, self.ecs_healthy_service):
+            try:
+                ecs.delete_service(cluster=self.ecs_cluster, service=service_name, force=True)
+            except ClientError as exc:
+                self._ignore(exc, "ClusterNotFoundException", "ServiceNotFoundException")
         try:
             ecs.delete_cluster(cluster=self.ecs_cluster)
         except ClientError as exc:
@@ -1384,6 +1440,11 @@ class ExtendedFixtures:
         for arn in ecs.list_task_definitions(familyPrefix=self.ecs_family, status="ACTIVE").get(
             "taskDefinitionArns", []
         ):
+            ecs.deregister_task_definition(taskDefinition=arn)
+        for arn in ecs.list_task_definitions(
+            familyPrefix=self.ecs_healthy_family,
+            status="ACTIVE",
+        ).get("taskDefinitionArns", []):
             ecs.deregister_task_definition(taskDefinition=arn)
         inactive = ecs.list_task_definitions(
             familyPrefix=self.ecs_family,
@@ -1778,6 +1839,20 @@ class ExtendedFixtures:
             int(services[0].get("desiredCount") or 0) > int(services[0].get("runningCount") or 0),
             "ECS degraded service fixture",
         )
+        healthy_services = ecs.describe_services(
+            cluster=self.ecs_cluster,
+            services=[self.ecs_healthy_service],
+        ).get("services", [])
+        self._expect(len(healthy_services) == 1, "healthy ECS service fixture")
+        self._expect(
+            int(healthy_services[0].get("desiredCount") or 0) == 1
+            and healthy_services[0].get("platformVersion") == "LATEST",
+            "healthy ECS service desired count and platform version",
+        )
+        self._expect(
+            self._ecs_task_is_running(self.ecs_healthy_family),
+            "healthy ECS task and container status",
+        )
         inactive = ecs.list_task_definitions(
             familyPrefix=f"{self.ecs_family}-inactive",
             status="INACTIVE",
@@ -1829,6 +1904,23 @@ class ExtendedFixtures:
             .get("NetworkInterfaces", [])
         )
         return bool(interfaces)
+
+    def _ecs_task_is_running(self, family: str) -> bool:
+        ecs = self.client("ecs")
+        task_arns = ecs.list_tasks(cluster=self.ecs_cluster).get("taskArns", [])
+        if not task_arns:
+            return False
+        tasks = ecs.describe_tasks(cluster=self.ecs_cluster, tasks=task_arns).get("tasks", [])
+        return any(
+            f"task-definition/{family}:" in str(task.get("taskDefinitionArn") or "")
+            and task.get("lastStatus") == "RUNNING"
+            and bool(task.get("containers"))
+            and all(
+                container.get("lastStatus") == "RUNNING"
+                for container in task.get("containers") or []
+            )
+            for task in tasks
+        )
 
     def _published_lambda_is_active(self, function_name: str, qualifier: str) -> bool:
         configuration = self.client("lambda").get_function(

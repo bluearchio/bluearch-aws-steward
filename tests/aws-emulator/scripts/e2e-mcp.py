@@ -20,7 +20,11 @@ from fixture_proxy import FixtureProxy  # noqa: E402
 CATALOG = json.loads(
     (REPOSITORY_ROOT / "bluearch_aws_steward/catalog/rules.json").read_text(encoding="utf-8")
 )
-ACTIVE_RULES = {str(rule["short_id"]) for rule in CATALOG["rules"]}
+ACTIVE_RULES = {
+    str(rule["short_id"]) for rule in CATALOG["rules"] if str(rule.get("service") or "") != "eks"
+}
+if len(ACTIVE_RULES) != 100:
+    raise RuntimeError(f"Expected 100 AWS-only rules, found {len(ACTIVE_RULES)}")
 RULE_FILTER = ",".join(sorted(ACTIVE_RULES))
 
 
@@ -75,7 +79,7 @@ class McpProcess:
                 "params": {
                     "protocolVersion": "2025-06-18",
                     "capabilities": {},
-                    "clientInfo": {"name": "bluearch-emulator-e2e", "version": "0.7.0b4"},
+                    "clientInfo": {"name": "bluearch-emulator-e2e", "version": "0.8.0b1"},
                 },
             }
         )["result"]
@@ -284,6 +288,79 @@ def main() -> int:
             cost_signal,
         )
         _expect(cost_signal["validation"]["status"] == "source_current", cost_signal)
+
+        investigation_targets = {
+            "ec2-unattached-ebs-volume": "ec2:DeleteVolume",
+            "ec2-unassociated-elastic-ip": "ec2:ReleaseAddress",
+            "ecs-inactive-task-definition": "ecs:DeleteTaskDefinitions",
+            "efs-inactive-unmounted": "elasticfilesystem:DeleteFileSystem",
+            "lambda-unused-function": "lambda:DeleteFunction",
+            "rds-idle-instance": "rds:DeleteDBInstance",
+        }
+        investigation_receipts: Dict[str, Any] = {}
+        for rule, planned_api in investigation_targets.items():
+            selected = next(item for item in queried_findings if item["rule"] == rule)
+            dossier = mcp.call(
+                "bluearch_investigate_resource",
+                {
+                    "assessment_id": assessment_id,
+                    "finding_id": selected["opportunity_id"],
+                },
+            )
+            _expect(dossier["read_only"] is True, dossier)
+            _expect(dossier["write_actions_applied"] is False, dossier)
+            _expect(dossier["deletion_readiness"]["safe_to_delete"] is False, dossier)
+            _expect(dossier["change_plan_preview"]["executable_by_steward"] is False, dossier)
+            _expect(
+                dossier["change_plan_preview"]["target_operation"]["aws_api"] == planned_api,
+                dossier,
+            )
+            investigation_receipts[rule] = {
+                "status": dossier["deletion_readiness"]["status"],
+                "aws_reads_performed": dossier["aws_reads_performed"],
+                "evidence_coverage": dossier["evidence_coverage"]["score"],
+                "planned_api": planned_api,
+                "write_actions_applied": False,
+            }
+
+        operational_targets = {
+            "ecs-platform-version-outdated": "ecs:UpdateService",
+            "ecs-service-health-degraded": None,
+            "ecs-unsafe-task-definition": "ecs:RegisterTaskDefinition",
+            "rds-high-cpu": None,
+            "rds-low-cpu-rightsizing": "rds:ModifyDBInstance",
+            "rds-publicly-accessible": "rds:ModifyDBInstance",
+            "rds-read-heavy-no-replica": "rds:CreateDBInstanceReadReplica",
+        }
+        operational_receipts: Dict[str, Any] = {}
+        for rule, planned_api in operational_targets.items():
+            selected = next(item for item in queried_findings if item["rule"] == rule)
+            dossier = mcp.call(
+                "bluearch_investigate_resource",
+                {
+                    "assessment_id": assessment_id,
+                    "finding_id": selected["opportunity_id"],
+                },
+            )
+            _expect(dossier["investigation"] == "operational_diagnosis", dossier)
+            _expect(dossier["read_only"] is True, dossier)
+            _expect(dossier["write_actions_applied"] is False, dossier)
+            _expect(dossier["operational_diagnosis"]["root_cause_confirmed"] is False, dossier)
+            _expect(dossier["change_plan_preview"]["executable_by_steward"] is False, dossier)
+            target_operation = dossier["change_plan_preview"]["target_operation"]
+            if planned_api is None:
+                _expect(target_operation is None, dossier)
+            else:
+                _expect(target_operation["aws_api"] == planned_api, dossier)
+            operational_receipts[rule] = {
+                "status": dossier["operational_diagnosis"]["status"],
+                "aws_reads_performed": dossier["aws_reads_performed"],
+                "evidence_coverage": dossier["evidence_coverage"]["score"],
+                "hypotheses": len(dossier["operational_diagnosis"]["hypotheses"]),
+                "planned_api": planned_api,
+                "write_actions_applied": False,
+            }
+
         plan = mcp.call(
             "bluearch_plan_remediation",
             {"assessment_id": assessment_id, "finding_id": versioning["opportunity_id"]},
@@ -321,6 +398,8 @@ def main() -> int:
                     "complete_pdf_verified": True,
                     "unified_sources_verified": True,
                     "deduplicated_signals": summary["deduplicated_signals"],
+                    "deletion_investigations": investigation_receipts,
+                    "operational_investigations": operational_receipts,
                     "plan_created": True,
                     "verification_read_only": True,
                     "write_actions_applied": False,

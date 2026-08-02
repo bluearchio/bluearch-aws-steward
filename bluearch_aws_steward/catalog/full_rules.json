@@ -6909,18 +6909,76 @@
       }
     },
     {
-      "id": "38c186b1-36f2-4133-a6ef-9c1628f5c6f6",
-      "short_id": null,
+      "id": "43b72440-6061-4b3d-a245-587b5cf38f6e",
+      "short_id": "eks-managed-addon-update-available",
       "service": "eks",
       "service_name": "eks",
-      "runtime_service": null,
+      "runtime_service": "eks",
+      "scenario": "A compatible default version update is available for an EKS managed add-on",
+      "alert_criteria": "The installed add-on version differs from the default compatible version returned for the cluster Kubernetes version",
+      "recommendation_action": "Review compatibility, configuration conflicts, workload health, and rollback steps before planning the add-on update.",
+      "risk_detail": "security, operations, reliability",
+      "severity": "medium",
+      "detector": "eks_managed_addon_update_available",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 2,
+      "effort_level": 2,
+      "risk_value": 2,
+      "description": "Compatible add-on updates can include fixes, but an available update alone does not prove the installed add-on is unhealthy.",
+      "category": "platform",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://docs.aws.amazon.com/eks/latest/userguide/updating-an-add-on.html"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "eks",
+        "addon",
+        "version"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "eks.json",
+        "source": "AWS EKS documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-managed-addon-update-available",
+        "detector": "eks_managed_addon_update_available",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "eks.list_clusters",
+          "eks.describe_cluster",
+          "eks.list_addons",
+          "eks.describe_addon",
+          "eks.describe_addon_versions"
+        ],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "38c186b1-36f2-4133-a6ef-9c1628f5c6f6",
+      "short_id": "eks-guardduty-runtime-monitoring-disabled",
+      "service": "eks",
+      "service_name": "eks",
+      "runtime_service": "eks",
       "scenario": "Amazon EKS clusters do not have GuardDuty Extended Threat Detection enabled",
       "alert_criteria": "GuardDuty EKS Runtime Monitoring is not enabled with no threat detection for containerized workloads",
       "recommendation_action": "Enable GuardDuty Extended Threat Detection for EKS to monitor container runtime behavior and detect threats in Kubernetes environments",
       "risk_detail": "security",
       "severity": "medium",
-      "detector": null,
-      "automated": false,
+      "detector": "eks_guardduty_runtime_monitoring_disabled",
+      "automated": true,
       "build_priority": 1,
       "action_value": 3,
       "effort_level": 1,
@@ -6950,26 +7008,483 @@
         "updated_at": "2025-11-05T21:07:18.013852Z"
       },
       "evaluation": {
-        "mode": "specification_required",
-        "automated": false,
-        "short_id": null,
-        "detector": null,
-        "support_reason": "The catalog row needs a reviewed detector specification before automation."
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-guardduty-runtime-monitoring-disabled",
+        "detector": "eks_guardduty_runtime_monitoring_disabled",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "guardduty.list_detectors",
+          "guardduty.get_detector"
+        ],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "66fe80cd-33a4-4176-8718-13f64147a423",
+      "short_id": "eks-public-endpoint-open",
+      "service": "eks",
+      "service_name": "eks",
+      "runtime_service": "eks",
+      "scenario": "EKS cluster API endpoint is publicly reachable from unrestricted CIDRs",
+      "alert_criteria": "endpointPublicAccess is enabled and publicAccessCidrs contains 0.0.0.0/0 or ::/0",
+      "recommendation_action": "Restrict public endpoint CIDRs or migrate administrative access to a reviewed private endpoint path.",
+      "risk_detail": "security, operations",
+      "severity": "high",
+      "detector": "eks_public_endpoint_open",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 3,
+      "description": "Unrestricted EKS API exposure increases control-plane attack surface. Access changes must preserve a validated administrative path.",
+      "category": "security",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://docs.aws.amazon.com/eks/latest/userguide/cluster-endpoint.html"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "eks",
+        "control-plane",
+        "networking"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "eks.json",
+        "source": "AWS EKS documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-public-endpoint-open",
+        "detector": "eks_public_endpoint_open",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "eks.list_clusters",
+          "eks.describe_cluster"
+        ],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "f5227b51-735c-4d67-897f-a905c3cab5dd",
+      "short_id": "eks-private-endpoint-disabled",
+      "service": "eks",
+      "service_name": "eks",
+      "runtime_service": "eks",
+      "scenario": "EKS cluster private API endpoint is disabled while public access is enabled",
+      "alert_criteria": "endpointPrivateAccess is false and endpointPublicAccess is true",
+      "recommendation_action": "Plan a reachable private administration path before enabling the private endpoint and restricting public access.",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "eks_private_endpoint_disabled",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 2,
+      "description": "Private endpoint access reduces public control-plane exposure, but an unsafe transition can lock operators out.",
+      "category": "security",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://docs.aws.amazon.com/eks/latest/userguide/cluster-endpoint.html"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "eks",
+        "control-plane",
+        "networking"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "eks.json",
+        "source": "AWS EKS documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-private-endpoint-disabled",
+        "detector": "eks_private_endpoint_disabled",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "eks.list_clusters",
+          "eks.describe_cluster"
+        ],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "61cedb38-f6a3-492b-b9a9-cdff2408305f",
+      "short_id": "eks-control-plane-logging-incomplete",
+      "service": "eks",
+      "service_name": "eks",
+      "runtime_service": "eks",
+      "scenario": "EKS control-plane logging does not include every supported log type",
+      "alert_criteria": "One or more of api, audit, authenticator, controllerManager, or scheduler logging is disabled",
+      "recommendation_action": "Enable missing control-plane log types after reviewing CloudWatch retention and cost.",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "eks_control_plane_logging_incomplete",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 1,
+      "risk_value": 2,
+      "description": "Incomplete logging limits incident response and operational diagnosis. Audit or authenticator gaps materially reduce security visibility.",
+      "category": "observability",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://docs.aws.amazon.com/eks/latest/userguide/control-plane-logs.html"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "eks",
+        "logging",
+        "audit"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "eks.json",
+        "source": "AWS EKS documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-control-plane-logging-incomplete",
+        "detector": "eks_control_plane_logging_incomplete",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "eks.list_clusters",
+          "eks.describe_cluster"
+        ],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "414ff551-cee0-4aa9-9fe5-68dec58a90a1",
+      "short_id": "eks-version-support-risk",
+      "service": "eks",
+      "service_name": "eks",
+      "runtime_service": "eks",
+      "scenario": "EKS Kubernetes version is in extended support or approaching end of support",
+      "alert_criteria": "The current version support status or support dates indicate extended support or less than 90 days remaining",
+      "recommendation_action": "Validate add-ons, APIs, node groups, workloads, and rollback capacity before planning a supported version upgrade.",
+      "risk_detail": "security, operations, reliability",
+      "severity": "high",
+      "detector": "eks_version_support_risk",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 3,
+      "risk_value": 3,
+      "description": "Unsupported or aging Kubernetes versions lose fixes and can constrain safe upgrade paths.",
+      "category": "lifecycle",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "eks",
+        "version",
+        "lifecycle"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "eks.json",
+        "source": "AWS EKS documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-version-support-risk",
+        "detector": "eks_version_support_risk",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "eks.list_clusters",
+          "eks.describe_cluster",
+          "eks.describe_cluster_versions"
+        ],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "1a7530de-a49e-4c19-b5ce-285e5ddc24c2",
+      "short_id": "eks-managed-addon-unhealthy",
+      "service": "eks",
+      "service_name": "eks",
+      "runtime_service": "eks",
+      "scenario": "EKS managed add-on reports a degraded or failed status",
+      "alert_criteria": "Managed add-on status is DEGRADED, CREATE_FAILED, UPDATE_FAILED, or DELETE_FAILED, or health issues are present",
+      "recommendation_action": "Correlate add-on health with kube-system pods and events before planning an update or configuration change.",
+      "risk_detail": "operations, reliability",
+      "severity": "high",
+      "detector": "eks_managed_addon_unhealthy",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 3,
+      "description": "A degraded networking, DNS, proxy, or storage add-on can affect broad portions of the cluster.",
+      "category": "platform",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://docs.aws.amazon.com/eks/latest/userguide/eks-add-ons.html"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "eks",
+        "addon",
+        "health"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "eks.json",
+        "source": "AWS EKS documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-managed-addon-unhealthy",
+        "detector": "eks_managed_addon_unhealthy",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "eks.list_clusters",
+          "eks.describe_cluster",
+          "eks.list_addons",
+          "eks.describe_addon"
+        ],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "17002d8c-9748-4ae1-8d70-0d747a78b64e",
+      "short_id": "eks-nodegroup-version-skew",
+      "service": "eks",
+      "service_name": "eks",
+      "runtime_service": "eks",
+      "scenario": "EKS managed node group Kubernetes version is behind its cluster version",
+      "alert_criteria": "Managed node group minor version differs from the cluster minor version",
+      "recommendation_action": "Review workload disruption budgets and available capacity before planning a node group upgrade.",
+      "risk_detail": "operations, reliability",
+      "severity": "medium",
+      "detector": "eks_nodegroup_version_skew",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 2,
+      "description": "Version skew can restrict support and complicate future cluster upgrades.",
+      "category": "compute",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://docs.aws.amazon.com/eks/latest/userguide/update-managed-node-group.html"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "eks",
+        "nodegroup",
+        "version"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "eks.json",
+        "source": "AWS EKS documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-nodegroup-version-skew",
+        "detector": "eks_nodegroup_version_skew",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "eks.list_clusters",
+          "eks.describe_cluster",
+          "eks.list_nodegroups",
+          "eks.describe_nodegroup"
+        ],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "48ed2c60-b006-4f24-9e09-e7e3b6aa03b1",
+      "short_id": "eks-nodegroup-health-degraded",
+      "service": "eks",
+      "service_name": "eks",
+      "runtime_service": "eks",
+      "scenario": "EKS managed node group reports health issues",
+      "alert_criteria": "nodegroup.health.issues is non-empty",
+      "recommendation_action": "Correlate the health issue with Kubernetes node conditions, workloads, events, PDBs, and capacity before changing the node group.",
+      "risk_detail": "operations, reliability",
+      "severity": "high",
+      "detector": "eks_nodegroup_health_degraded",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 3,
+      "description": "Managed node group health issues can reduce capacity or block safe deployments.",
+      "category": "compute",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://docs.aws.amazon.com/eks/latest/APIReference/API_NodegroupHealth.html"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "eks",
+        "nodegroup",
+        "health"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "eks.json",
+        "source": "AWS EKS API documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-nodegroup-health-degraded",
+        "detector": "eks_nodegroup_health_degraded",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "eks.list_clusters",
+          "eks.describe_cluster",
+          "eks.list_nodegroups",
+          "eks.describe_nodegroup"
+        ],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "c6dea539-c4af-4428-9e81-2e34f7265acb",
+      "short_id": "eks-nodegroup-ami-outdated",
+      "service": "eks",
+      "service_name": "eks",
+      "runtime_service": "eks",
+      "scenario": "EKS managed node group uses an outdated EKS-optimized AMI release",
+      "alert_criteria": "A newer EKS-optimized AMI release is available for a managed AMI node group; custom AMIs are excluded",
+      "recommendation_action": "Review launch template compatibility, PDBs, and spare capacity before planning the AMI update.",
+      "risk_detail": "security, operations, reliability",
+      "severity": "medium",
+      "detector": "eks_nodegroup_ami_outdated",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 2,
+      "description": "Outdated managed AMIs can miss security and runtime fixes. Custom AMIs require a separate provenance review.",
+      "category": "compute",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://docs.aws.amazon.com/eks/latest/userguide/update-managed-node-group.html"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "eks",
+        "nodegroup",
+        "ami"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "eks.json",
+        "source": "AWS EKS documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-nodegroup-ami-outdated",
+        "detector": "eks_nodegroup_ami_outdated",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "eks.list_clusters",
+          "eks.describe_cluster",
+          "eks.list_nodegroups",
+          "eks.describe_nodegroup",
+          "ssm.get_parameter"
+        ],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
       }
     },
     {
       "id": "5fc3d4a9-96ef-4bba-82e9-bccabe531b34",
-      "short_id": null,
+      "short_id": "eks-workload-overprovisioned",
       "service": "eks",
       "service_name": "eks",
-      "runtime_service": null,
+      "runtime_service": "eks",
       "scenario": "EKS pods or worker nodes are overprovisioned for observed workload demand",
       "alert_criteria": "CPU, memory, and network utilization over reviewed 14-, 30-, and 90-day windows, including a 40% safety margin, remains below requested pod resources or worker-node capacity.",
       "recommendation_action": "Right-size pod requests, limits, and worker-node capacity after reviewing workload seasonality, autoscaling behavior, disruption budgets, and peak demand.",
       "risk_detail": "cost, performance",
       "severity": "low",
-      "detector": null,
-      "automated": false,
+      "detector": "eks_workload_overprovisioned",
+      "automated": true,
       "build_priority": null,
       "action_value": 3,
       "effort_level": 2,
@@ -6992,11 +7507,17 @@
         "updated_at": "2025-11-04T23:07:44.651478Z"
       },
       "evaluation": {
-        "mode": "specification_required",
-        "automated": false,
-        "short_id": null,
-        "detector": null,
-        "support_reason": "The catalog row needs a reviewed detector specification before automation."
+        "mode": "native",
+        "automated": true,
+        "short_id": "eks-workload-overprovisioned",
+        "detector": "eks_workload_overprovisioned",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": null,
+        "capabilities": [
+          "cloudwatch.get_metric_data"
+        ],
+        "evaluation_kind": "signal",
+        "access_tier": "free"
       }
     },
     {
@@ -10242,6 +10763,474 @@
         "short_id": null,
         "detector": null,
         "support_reason": "The catalog row needs a reviewed detector specification before automation."
+      }
+    },
+    {
+      "id": "ee15e84f-3bfd-43fe-8751-1c4065b3c7dd",
+      "short_id": "k8s-pod-cpu-limit-pressure",
+      "service": "kubernetes",
+      "service_name": "kubernetes",
+      "runtime_service": "eks",
+      "scenario": "Kubernetes pod CPU use remains close to its configured limit",
+      "alert_criteria": "P95 CPU usage is at least 80 percent of the limit for five of six periods with sufficient datapoints",
+      "recommendation_action": "Review HPA state, application behavior, requests, limits, and throttling-specific evidence before changing CPU.",
+      "risk_detail": "performance, reliability",
+      "severity": "medium",
+      "detector": "k8s_pod_cpu_limit_pressure",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 2,
+      "description": "High utilization against a limit is pressure evidence but does not by itself prove CPU throttling.",
+      "category": "performance",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "kubernetes",
+        "cpu",
+        "performance"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "kubernetes.json",
+        "source": "Kubernetes documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "k8s-pod-cpu-limit-pressure",
+        "detector": "k8s_pod_cpu_limit_pressure",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": "eks",
+        "capabilities": [],
+        "evaluation_kind": "signal",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "19711ad3-7aae-46e2-8d1d-936474ad1ba2",
+      "short_id": "k8s-pod-memory-pressure",
+      "service": "kubernetes",
+      "service_name": "kubernetes",
+      "runtime_service": "eks",
+      "scenario": "Kubernetes pod has OOM termination or sustained memory pressure near its limit",
+      "alert_criteria": "A container was OOMKilled or P95 working set is at least 90 percent of its limit for five of six periods",
+      "recommendation_action": "Correlate OOM termination, working set, limits, restarts, node pressure, and application behavior before changing memory.",
+      "risk_detail": "performance, reliability",
+      "severity": "high",
+      "detector": "k8s_pod_memory_pressure",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 3,
+      "description": "Memory pressure can cause restarts, eviction, and degraded availability; missing metrics are not interpreted as zero.",
+      "category": "performance",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "kubernetes",
+        "memory",
+        "oom"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "kubernetes.json",
+        "source": "Kubernetes documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "k8s-pod-memory-pressure",
+        "detector": "k8s_pod_memory_pressure",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": "eks",
+        "capabilities": [],
+        "evaluation_kind": "signal",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "f576861a-fe3d-4ce9-a1ba-2bc088d86d64",
+      "short_id": "k8s-pod-restart-loop",
+      "service": "kubernetes",
+      "service_name": "kubernetes",
+      "runtime_service": "eks",
+      "scenario": "Kubernetes pod is repeatedly restarting or waiting in CrashLoopBackOff",
+      "alert_criteria": "A container is waiting with CrashLoopBackOff or has at least five recent restarts",
+      "recommendation_action": "Correlate status, last termination, probes, resource pressure, rollout state, and events before changing the workload.",
+      "risk_detail": "reliability, operations",
+      "severity": "high",
+      "detector": "k8s_pod_restart_loop",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 3,
+      "description": "Restart loops are a symptom; the investigator must distinguish application exit, probe failure, configuration, and resource pressure.",
+      "category": "runtime",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "kubernetes",
+        "pod",
+        "crashloop"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "kubernetes.json",
+        "source": "Kubernetes documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "k8s-pod-restart-loop",
+        "detector": "k8s_pod_restart_loop",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": "eks",
+        "capabilities": [],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "8e69205c-40e6-4f9f-80ba-3981a20913c4",
+      "short_id": "k8s-pod-unschedulable",
+      "service": "kubernetes",
+      "service_name": "kubernetes",
+      "runtime_service": "eks",
+      "scenario": "Kubernetes pod remains unschedulable",
+      "alert_criteria": "PodScheduled is false with an Unschedulable reason for at least five minutes",
+      "recommendation_action": "Explain the exact scheduler constraint and compare requests, selectors, taints, affinity, storage, and node capacity.",
+      "risk_detail": "reliability, operations",
+      "severity": "high",
+      "detector": "k8s_pod_unschedulable",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 3,
+      "description": "Pending pods can block availability and deployments, but the scheduler message must support the claimed cause.",
+      "category": "runtime",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://kubernetes.io/docs/concepts/scheduling-eviction/"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "kubernetes",
+        "scheduling",
+        "pending"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "kubernetes.json",
+        "source": "Kubernetes documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "k8s-pod-unschedulable",
+        "detector": "k8s_pod_unschedulable",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": "eks",
+        "capabilities": [],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "1d2e851b-4f16-40bc-8a1b-89dd07c09a1e",
+      "short_id": "k8s-workload-missing-resource-requests",
+      "service": "kubernetes",
+      "service_name": "kubernetes",
+      "runtime_service": "eks",
+      "scenario": "Kubernetes workload containers do not define both CPU and memory requests",
+      "alert_criteria": "A Deployment, StatefulSet, or DaemonSet application container omits a CPU or memory request",
+      "recommendation_action": "Measure representative usage and add reviewed requests without changing the live cluster automatically.",
+      "risk_detail": "performance, reliability, cost",
+      "severity": "medium",
+      "detector": "k8s_workload_missing_resource_requests",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 1,
+      "risk_value": 2,
+      "description": "Missing requests weaken scheduling, autoscaling, and capacity planning.",
+      "category": "workload",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "kubernetes",
+        "resources",
+        "scheduling"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "kubernetes.json",
+        "source": "Kubernetes documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "k8s-workload-missing-resource-requests",
+        "detector": "k8s_workload_missing_resource_requests",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": "eks",
+        "capabilities": [],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "82ee867e-d1d8-4f7d-90b6-f24dcd20acef",
+      "short_id": "k8s-workload-missing-memory-limit",
+      "service": "kubernetes",
+      "service_name": "kubernetes",
+      "runtime_service": "eks",
+      "scenario": "Kubernetes workload containers do not define memory limits",
+      "alert_criteria": "A Deployment, StatefulSet, or DaemonSet application container omits a memory limit",
+      "recommendation_action": "Measure peak memory, account for runtime behavior, and add a reviewed limit.",
+      "risk_detail": "performance, reliability",
+      "severity": "medium",
+      "detector": "k8s_workload_missing_memory_limit",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 1,
+      "risk_value": 2,
+      "description": "Missing memory limits allow a container to consume memory until node pressure or eviction occurs.",
+      "category": "workload",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "kubernetes",
+        "resources",
+        "memory"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "kubernetes.json",
+        "source": "Kubernetes documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "k8s-workload-missing-memory-limit",
+        "detector": "k8s_workload_missing_memory_limit",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": "eks",
+        "capabilities": [],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "5452b6e0-43df-44e0-a34d-362e9c2ac1d9",
+      "short_id": "k8s-workload-missing-probes",
+      "service": "kubernetes",
+      "service_name": "kubernetes",
+      "runtime_service": "eks",
+      "scenario": "Kubernetes workload containers do not define readiness and liveness probes",
+      "alert_criteria": "An application container in a Deployment, StatefulSet, or DaemonSet omits readiness or liveness probes",
+      "recommendation_action": "Define application-specific probes and validate thresholds in a staged rollout.",
+      "risk_detail": "operations, reliability",
+      "severity": "medium",
+      "detector": "k8s_workload_missing_probes",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 1,
+      "risk_value": 2,
+      "description": "Missing probes prevent Kubernetes from reliably routing around or restarting unhealthy containers.",
+      "category": "workload",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "kubernetes",
+        "probes",
+        "health"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "kubernetes.json",
+        "source": "Kubernetes documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "k8s-workload-missing-probes",
+        "detector": "k8s_workload_missing_probes",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": "eks",
+        "capabilities": [],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "45189c42-86bf-4a4f-a7fe-947e4c1ef8d0",
+      "short_id": "k8s-workload-dangerous-privileges",
+      "service": "kubernetes",
+      "service_name": "kubernetes",
+      "runtime_service": "eks",
+      "scenario": "Kubernetes workload requests dangerous host or container privileges",
+      "alert_criteria": "A workload explicitly enables privileged mode, privilege escalation, host namespaces, hostPath, or dangerous Linux capabilities",
+      "recommendation_action": "Remove unnecessary privileges in source manifests and validate the workload in a staged environment.",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "k8s_workload_dangerous_privileges",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 2,
+      "risk_value": 3,
+      "description": "Dangerous privileges can expand a container compromise to the node or cluster.",
+      "category": "security",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "kubernetes",
+        "pod-security",
+        "privileged"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "kubernetes.json",
+        "source": "Kubernetes Pod Security Standards",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "k8s-workload-dangerous-privileges",
+        "detector": "k8s_workload_dangerous_privileges",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": "eks",
+        "capabilities": [],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
+      }
+    },
+    {
+      "id": "a9d36d97-5c67-49bd-918f-994419830cab",
+      "short_id": "k8s-workload-disruption-unprotected",
+      "service": "kubernetes",
+      "service_name": "kubernetes",
+      "runtime_service": "eks",
+      "scenario": "Replicated and service-exposed Kubernetes workload has no PodDisruptionBudget",
+      "alert_criteria": "A workload has at least two replicas and an associated Service but no selecting PodDisruptionBudget",
+      "recommendation_action": "Add a reviewed PodDisruptionBudget that preserves availability without blocking maintenance.",
+      "risk_detail": "reliability, operations",
+      "severity": "medium",
+      "detector": "k8s_workload_disruption_unprotected",
+      "automated": true,
+      "build_priority": 0,
+      "action_value": 3,
+      "effort_level": 1,
+      "risk_value": 2,
+      "description": "Without a PDB, voluntary disruptions can remove too many replicas at once.",
+      "category": "workload",
+      "output_notes": null,
+      "notes": null,
+      "pillars": [],
+      "external_refs": {},
+      "compliance_mappings": [],
+      "detection_methods": [],
+      "references": [
+        "https://kubernetes.io/docs/tasks/run-application/configure-pdb/"
+      ],
+      "aws_doc_url": null,
+      "tags": [
+        "kubernetes",
+        "pdb",
+        "availability"
+      ],
+      "source": {
+        "repository": "bluearchio/aws-misconfig-db",
+        "file": "kubernetes.json",
+        "source": "Kubernetes documentation",
+        "updated_at": "2026-07-21T00:00:00Z"
+      },
+      "evaluation": {
+        "mode": "native",
+        "automated": true,
+        "short_id": "k8s-workload-disruption-unprotected",
+        "detector": "k8s_workload_disruption_unprotected",
+        "support_reason": "Implemented by a deterministic BlueArch AWS Steward detector.",
+        "runtime_service": "eks",
+        "capabilities": [],
+        "evaluation_kind": "configuration",
+        "access_tier": "free"
       }
     },
     {
@@ -36317,15 +37306,15 @@
     }
   ],
   "sync": {
-    "catalog_rules": 631,
-    "catalog_services": 47,
+    "catalog_rules": 649,
+    "catalog_services": 48,
     "rules_by_evaluation_mode": {
-      "native": 100,
+      "native": 120,
       "native_alias": 7,
       "manual_review": 117,
       "metadata_required": 191,
       "signal_required": 5,
-      "specification_required": 211
+      "specification_required": 209
     },
     "rules_by_service": {
       "account": 1,
@@ -36344,7 +37333,7 @@
       "ec2": 49,
       "ecs": 6,
       "efs": 8,
-      "eks": 2,
+      "eks": 11,
       "elastic-beanstalk": 2,
       "elasticache": 2,
       "elasticsearch": 1,
@@ -36355,6 +37344,7 @@
       "inspector": 3,
       "kinesis": 7,
       "kms": 2,
+      "kubernetes": 9,
       "lambda": 21,
       "nat-gateway": 6,
       "network-firewall": 1,

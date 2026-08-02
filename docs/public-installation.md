@@ -1,29 +1,49 @@
 # Public Installation
 
-This document defines the supported public installation contract. The package
-is not published yet; current automation only builds and validates it.
+This document defines the supported public installation contract. Steward
+requires Python 3.10 or newer. `pip` and `uv` install the same complete wheel,
+including EKS and Kubernetes support.
 
-## Recommended Installation
+## Install With pip
 
-Install `uv` on macOS or Linux with its official standalone installer:
+Use a virtual environment so Steward does not modify the system Python:
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade bluearch-aws-steward
+bluearch-steward --version
+bluearch-steward mcp smoke
 ```
 
-Alternatively, macOS users can run `brew install uv`. The standalone installer
-and `uv` can provide the compatible Python runtime required by Steward.
+On Windows, activate the environment with:
 
-Install Steward as an isolated persistent tool:
+```powershell
+.venv\Scripts\activate
+```
+
+The `bluearch-steward` and `bluearch-steward-mcp` commands are installed in the
+active environment. EKS and Kubernetes support is included; no optional extra
+is required.
+
+## Install As An Isolated Tool
+
+[`uv`](https://docs.astral.sh/uv/) can manage a compatible Python runtime and a
+persistent isolated environment:
 
 ```bash
-uv tool install 'bluearch-aws-steward==0.7.0b4'
+uv tool install --upgrade bluearch-aws-steward
 uv tool update-shell
 bluearch-steward --version
 bluearch-steward mcp smoke
 ```
 
-Register Steward with one or more supported MCP clients:
+Restart the shell after `uv tool update-shell` if the command is not yet on
+`PATH`.
+
+## Connect An MCP Client
+
+Register the installed runtime with one or more supported clients:
 
 ```bash
 bluearch-steward mcp install --client codex
@@ -31,55 +51,50 @@ bluearch-steward mcp install --client cursor
 bluearch-steward mcp install --client claude
 ```
 
-Repeat `--client` to configure multiple clients, or use `--client all` to
-configure detected clients. Use `--dry-run` to inspect the exact path or native
-client command before changing anything. Steward backs up existing client
-configuration files and preserves unrelated MCP servers. Restart each client
-after changing MCP configuration.
+Repeat `--client` or use `--client all` to configure detected clients. Use
+`--dry-run` to preview the exact change. Steward preserves unrelated MCP
+servers and backs up changed configuration files. Restart the client after
+registration.
 
-For an unsupported stdio MCP client, print the portable JSON instead:
+For any other stdio MCP client, print portable configuration:
 
 ```bash
 bluearch-steward mcp config --runtime installed
 ```
 
-Steward does not start a separate HTTP service. The MCP client starts the stdio
-process when needed.
+Steward does not start a separate HTTP service. The MCP client starts the
+stdio process when needed.
 
-## Zero-Install MCP Runtime
+## Resolve A Pinned Runtime With uvx
 
-`uvx` can resolve an exact released Steward version and cache its isolated
-environment:
+An MCP client can resolve and cache an exact published version on demand:
 
 ```bash
 bluearch-steward mcp config --runtime uvx
 ```
 
-For preview version `0.7.0b4`, the generated server executes the equivalent of:
+For `0.8.0b1`, the generated server command is equivalent to:
 
 ```bash
-uvx --from bluearch-aws-steward==0.7.0b4 bluearch-steward-mcp
+uvx --from bluearch-aws-steward==0.8.0b1 bluearch-steward-mcp
 ```
 
-Persistent `uv tool install` is the default recommendation because startup does
-not depend on package resolution and upgrades happen only when the user asks.
-The `uvx` shape is useful for disposable environments and clients that manage
-their own MCP process cache.
+Persistent `pip` or `uv tool` installation remains the default because startup
+does not depend on package resolution. The `uvx` form is useful for disposable
+environments and MCP clients that manage their own process cache.
 
-## Development Checkout
+## Included And External Components
 
-Before the package is published, or when contributing:
+The standard wheel contains the Steward application, rule catalog, report
+renderers, AWS SDK provider, MCP server, and EKS/Kubernetes Python support.
+External executables are not embedded in a Python wheel:
 
-```bash
-git clone https://github.com/bluearchio/bluearch-aws-steward.git
-cd bluearch-aws-steward
-make dev-sync
-make runtime-info
-uv run bluearch-steward mcp config
-```
-
-After source or dependency changes, run `make dev-sync` and restart the MCP
-client. A running Python MCP process does not hot reload code.
+- AWS CLI is needed for interactive AWS SSO login and AWS CLI compatibility
+  workflows.
+- `kubectl` is needed for operator-side Kubernetes inspection and lab commands,
+  not for Steward's allowlisted Kubernetes API reads.
+- Docker, `kind`, Terraform/OpenTofu, Helm, and Kustomize are development or
+  infrastructure-validation tools used only by their documented workflows.
 
 ## AWS Authentication
 
@@ -93,52 +108,64 @@ aws sso login --profile my-sso-profile
 ```
 
 Steward lists configured profiles and asks the user to choose when the context
-is ambiguous. Routine assessments should use the generated read-only IAM
-policy in `iam/read-policy.json`.
+is ambiguous. Routine assessments should use the generated read-only policy in
+`iam/read-policy.json`.
 
 ## Upgrade And Remove
 
+For a pip environment:
+
 ```bash
-uv tool upgrade bluearch-aws-steward
-bluearch-steward --version
+source .venv/bin/activate
+python -m pip install --upgrade bluearch-aws-steward
 bluearch-steward mcp smoke
+python -m pip uninstall bluearch-aws-steward
 ```
 
-Restart MCP clients after every upgrade. Remove Steward with:
+For a uv tool:
 
 ```bash
+uv tool upgrade bluearch-aws-steward
+bluearch-steward mcp smoke
 uv tool uninstall bluearch-aws-steward
 ```
 
-Remove only Steward's MCP registration while preserving other MCP servers:
+Restart MCP clients after every upgrade. Remove only Steward's registration
+while preserving other MCP servers with:
 
 ```bash
 bluearch-steward mcp uninstall --client codex
 ```
 
+## Development Checkout
+
+Use a source checkout only when contributing or testing an unpublished
+candidate:
+
+```bash
+git clone https://github.com/bluearchio/bluearch-aws-steward.git
+cd bluearch-aws-steward
+make dev-sync
+make runtime-info
+uv run bluearch-steward mcp config
+```
+
+After source or dependency changes, run `make dev-sync` and restart the MCP
+client. A running Python MCP process does not hot reload code.
+
 ## Release Validation
 
-Maintainers validate the same package boundary without publishing anything:
+Maintainers validate the package boundary without publishing:
 
 ```bash
 make package-install-smoke
 ```
 
-The release-candidate GitHub Actions workflow builds the wheel and source
-distribution, installs the wheel as a `uv` tool, checks both entry points, runs
-the MCP smoke test, and verifies the version-pinned `uvx` configuration. It does
-not upload to PyPI, create a GitHub release, or deploy artifacts.
+CI builds the wheel once, verifies its metadata, and installs that wheel with
+plain `pip` on Python 3.10, 3.11, 3.12, and 3.13. Each clean job imports the
+Kubernetes client and runs the Steward version and MCP smoke commands. Release
+workflows additionally validate an isolated `uv tool` and version-pinned `uvx`
+configuration before guarded TestPyPI and PyPI publication.
 
-The separate `release.yml` workflow runs only for an explicit version tag. It
-publishes the validated artifacts to TestPyPI, installs and smoke-tests that
-upload, then creates a draft GitHub prerelease containing the same artifacts
-and their checksums. A separate `publish-pypi.yml` workflow uploads those assets
-to PyPI only after a maintainer manually publishes the draft release. Both
-package indexes use short-lived OIDC credentials, not stored API tokens.
-
-Before public package publication, the remaining manual steps are:
-
-1. Configure pending Trusted Publishers for PyPI and TestPyPI.
-2. Push the annotated `v0.7.0b4` tag only after the latest commit passes all gates.
-3. Review the TestPyPI verification and draft release assets.
-4. Publish the draft GitHub prerelease to approve PyPI publication.
+The complete EKS-inclusive package contract starts with `0.8.0b1`. Until that
+candidate is published, PyPI continues to serve the previous preview.

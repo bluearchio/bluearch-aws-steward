@@ -30,11 +30,12 @@ step, remediation mode, and verification command or tool call.
 
 ## Current Baseline
 
-As of v0.7.0, Steward has:
+As of v0.8.0b1, Steward has:
 
-- 100 free native rules across 16 runtime scopes.
-- A 631-entry bundled knowledge catalog.
-- LocalEmu positive fixture coverage for all active native rules.
+- 120 free native rules across 17 runtime scopes.
+- A 649-entry bundled knowledge catalog.
+- LocalEmu positive fixture coverage for 100 AWS-only rules and hybrid
+  LocalEmu plus `kind` functional coverage for 20 EKS/Kubernetes rules.
 - AWS SDK and AWS CLI provider paths.
 - MCP assessment, status, results, resource details, report export,
   remediation planning, guarded apply, and verification tools.
@@ -44,7 +45,7 @@ As of v0.7.0, Steward has:
 This plan expands from configuration recommendations into operational,
 performance, cost, security, and code-aware recommendations.
 
-The first 100 canonical rules are the permanent open-source baseline. New
+The first 120 canonical rules are the permanent open-source baseline. New
 canonical rules after this line default to the `premium` access tier. Any
 future entitlement layer must remain outside AWS evidence collection and must
 not introduce hosted telemetry into the local scanner.
@@ -78,7 +79,7 @@ Near-term investment priority is therefore:
 6. keep MCP installation and the first useful assessment frictionless.
 
 Native rule expansion continues, but it supports these workflows rather than
-becoming the primary product claim. The first 100 rules remain the permanent
+becoming the primary product claim. The first 120 rules remain the permanent
 open-source trust and adoption baseline.
 
 ## Guiding Principles
@@ -92,7 +93,8 @@ open-source trust and adoption baseline.
 6. Missing evidence means unknown, not healthy.
 7. Remediation must be planned, reviewable, reversible when possible, and
    explicitly approved.
-8. LocalEmu fixtures must prove every active rule before release.
+8. LocalEmu or a documented hybrid functional lab must prove every active rule
+   before release.
 9. Rules must not expose secrets, full IAM policies, ECS environment values,
    Kubernetes secret values, or customer-sensitive payloads.
 10. Hosted history, telemetry, and team policy are optional future layers, not
@@ -335,8 +337,14 @@ LocalEmu requirement:
 
 - use LocalEmu for AWS-side EKS, IAM, EC2, and load balancer resources where
   supported;
-- use a local Kubernetes fixture cluster or static Kubernetes manifest fixtures
-  for workload-level findings;
+- treat LocalEmu EKS as a control-plane response fixture only: LocalEmu 1.1.0
+  accepts cluster creation but the cluster settles in `CREATE_FAILED` and the
+  generated Kubernetes endpoint is not reachable;
+- use a `kind` cluster for functional workload, scheduling, rollout, probe, and
+  live-debugging findings, while static Kubernetes manifests remain valid for
+  isolated parser and policy tests;
+- correlate LocalEmu and `kind` through deterministic fixture metadata instead
+  of claiming that LocalEmu emulates the managed EKS data plane;
 - keep fixture state deterministic and offline.
 
 ### Phase 3: Add Signal-Based Recommendations
@@ -651,8 +659,8 @@ commitments. Each stage must finish with a demonstrable user outcome.
 
 ### Stage 0: Trusted Rule And Safety Baseline - Complete
 
-- 100 free native rules across 16 scopes.
-- Public LocalEmu proof and coverage matrix.
+- 120 free native rules across 17 scopes.
+- Public LocalEmu and hybrid EKS proof with a coverage matrix.
 - MCP-first assessment, query, report, plan, guarded apply, and verification in
   a repository checkout.
 - Evidence, risk, cost confidence, remediation safety, and terminal PDF choice
@@ -685,7 +693,7 @@ minutes.
 
 Proof of value: one concise queue with current evidence and no duplicate noise.
 
-### Stage 3: IaC Source Mapping And Validated Patches
+### Stage 3: IaC Source Mapping And Validated Patches - In Progress
 
 - Add `bluearch_find_iac_source`, `bluearch_plan_iac_patch`, and
   `bluearch_validate_patch`.
@@ -697,7 +705,7 @@ Proof of value: one concise queue with current evidence and no duplicate noise.
 Proof of value: a selected live finding becomes a validated, reviewable code
 change without an unapproved production mutation.
 
-### Stage 4: Investigation Playbooks
+### Stage 4: Investigation Playbooks - In Progress
 
 - Add `bluearch_debug_resource` and reusable evidence-collection playbooks.
 - Prioritize EKS performance, Lambda errors, RDS pressure, ALB health, IAM
@@ -723,7 +731,7 @@ not only a configuration finding.
 Proof of value: each new rule unlocks a concrete recommendation, playbook, or
 fix path with low false-positive risk.
 
-### Stage 6: EKS And Kubernetes Product Pack
+### Stage 6: EKS And Kubernetes Product Pack - Complete For Preview
 
 - Add EKS and Kubernetes provider operations.
 - Detect cluster configuration, logging, encryption, endpoint exposure, and
@@ -787,6 +795,7 @@ workflow, and governance rather than raw rule count.
    high-value findings before adding another broad detector batch.
 6. Select the next 20 rules by workflow value and feasibility, then expand
    LocalEmu fixtures before marking them native.
-7. Prototype the EKS read-only investigation flow separately from remediation.
-8. Add MCP evaluation prompts and tests for aggregation, prioritization, IaC
-   patching, EKS debugging, and verification.
+7. Validate the delivered EKS read-only investigation flow against an approved
+   AWS EKS sandbox before release promotion.
+8. Expand source mapping beyond planning fragments so generated EKS patches can
+   target the owning repository file with explicit user review.

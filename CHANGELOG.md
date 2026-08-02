@@ -7,6 +7,30 @@ as preview are not covered by a stable API compatibility promise.
 
 ## [Unreleased]
 
+## [0.8.0b1] - Preview candidate
+
+### Added
+
+- A read-only `bluearch_investigate_resource` MCP tool for deletion-readiness
+  investigations. The initial EBS, Elastic IP, ECS task-definition, EFS, and
+  Lambda investigators revalidate live state, gather direct and optional AWS
+  Config relationships, expose recovery and ownership context, and preserve
+  unknowns without declaring a resource safe to delete.
+- A Docker-backed healthy ECS control fixture that proves a task and container
+  are running, plus a hybrid LocalEmu and four-node `kind` EKS functional lab.
+- Idle RDS deletion readiness and operational diagnosis for RDS CPU,
+  rightsizing, read scaling, and public exposure plus ECS service health,
+  platform version, and unsafe task definitions. Diagnoses return redacted
+  evidence and unconfirmed hypotheses, never automatic changes.
+- Twenty read-only EKS and Kubernetes rules covering control-plane, node-group,
+  add-on, workload configuration, runtime, performance, and cost risks.
+- Rule-specific EKS investigations that correlate AWS and inside-cluster
+  evidence while excluding Secrets, logs, exec, proxy, port-forward, and writes.
+- Planning-only Terraform, CloudFormation, eksctl, Kubernetes YAML, Helm, and
+  Kustomize patch generation with digest verification and temporary validation.
+- A real stdio MCP product gate that validates all 20 rules, investigations,
+  patch flow, post-fix assessment, PDF export, healthy controls, and zero writes.
+
 ## [0.7.0b4] - Preview candidate
 
 ### Changed

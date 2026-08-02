@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -13,7 +14,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, TextIO, Tuple,
 from bluearch_aws_steward import __version__
 from bluearch_aws_steward.assessments import AssessmentStore
 from bluearch_aws_steward.aws_context import discover_aws_context
-from bluearch_aws_steward.aws_endpoints import validate_explicit_aws_endpoint
+from bluearch_aws_steward.aws_endpoints import (
+    is_loopback_aws_endpoint,
+    validate_explicit_aws_endpoint,
+)
 from bluearch_aws_steward.catalog import filter_rules
 from bluearch_aws_steward.catalog_registry import catalog_coverage, search_catalog_rules
 from bluearch_aws_steward.catalog_sync import EVALUATION_MODES
@@ -22,6 +26,12 @@ from bluearch_aws_steward.finding_sources import (
     SUPPORTED_FINDING_SOURCES,
     normalize_external_findings,
 )
+from bluearch_aws_steward.iac_patches import (
+    IAC_PATCH_FORMATS,
+    generate_iac_patch,
+    validate_iac_patch,
+)
+from bluearch_aws_steward.investigation import investigate_finding, investigation_kind
 from bluearch_aws_steward.mcp_prompts import (
     McpPromptError,
     get_mcp_prompt,
@@ -40,6 +50,12 @@ from bluearch_aws_steward.providers.factory import (
     SUPPORTED_AWS_PROVIDERS,
     create_aws_provider,
     provider_dependency_status,
+)
+from bluearch_aws_steward.providers.kubernetes import (
+    KUBERNETES_READ_OPERATIONS,
+    KubernetesProvider,
+    KubernetesProviderConfig,
+    KubernetesProviderError,
 )
 from bluearch_aws_steward.providers.operations import iam_action_for_operation
 from bluearch_aws_steward.recommendation_queue import (
@@ -119,6 +135,11 @@ MCP_INSTRUCTIONS = (
     "to stop pending work without discarding completed reads. Completed and cancelled assessments "
     "offer a native Yes/No PDF choice. Use bluearch_query_results to filter, facet, sort, "
     "or paginate the complete snapshot without rescanning. Use bluearch_get_resource_details for a returned resource. "
+    "Use bluearch_investigate_resource to deepen a supported finding with live dependencies, evidence "
+    "coverage, hypotheses, recovery, ownership, and blast-radius facts before proposing a change. "
+    "For EKS and Kubernetes findings, use bluearch_generate_iac_patch and "
+    "bluearch_validate_iac_patch to produce planning-only source changes. These tools never modify "
+    "files or clusters, and bluearch_apply_remediation does not support EKS or Kubernetes. "
     "Do not ask the user to run BlueArch CLI commands. "
     "Do not reimplement AWS checks with shell commands after a Steward tool error or timeout; "
     "instead explain the blocker and start a narrower assessment with bucket_prefix or rule_filter. "
@@ -813,6 +834,8 @@ class StewardMcpServer:
     def _call_tool(self, tool_name: str, arguments: JSON) -> JSON:
         if tool_name == "bluearch_list_aws_profiles":
             return self._tool_list_aws_profiles()
+        if tool_name == "bluearch_validate_eks_connection":
+            return self._tool_validate_eks_connection(arguments)
         if tool_name == "bluearch_assess":
             return self._tool_assess(arguments)
         if tool_name == "bluearch_get_scan_status":
@@ -836,6 +859,8 @@ class StewardMcpServer:
 
         follow_up_tools = {
             "bluearch_explain_finding",
+            "bluearch_investigate_resource",
+            "bluearch_generate_iac_patch",
             "bluearch_plan_remediation",
             "bluearch_verify_remediation",
         }
@@ -844,6 +869,12 @@ class StewardMcpServer:
 
         if tool_name == "bluearch_plan_remediation":
             return self._tool_plan_remediation(arguments)
+        if tool_name == "bluearch_investigate_resource":
+            return self._tool_investigate_resource(arguments)
+        if tool_name == "bluearch_generate_iac_patch":
+            return self._tool_generate_iac_patch(arguments)
+        if tool_name == "bluearch_validate_iac_patch":
+            return self._tool_validate_iac_patch(arguments)
         if tool_name == "bluearch_apply_remediation":
             return self._tool_apply_remediation(arguments)
 
@@ -1032,6 +1063,11 @@ class StewardMcpServer:
 
         plan = stored["plan"]
         finding = stored["finding"]
+        if str(finding.get("service") or "") == "eks":
+            raise McpToolError(
+                "EKS and Kubernetes remediation is planning-only. Generate and validate an IaC "
+                "patch, then apply it through the repository's normal review and deployment workflow."
+            )
         prepared = self._arguments_for_remediation_plan(arguments, plan)
         prepared, blocked, identity = self._prepare_live_aws_arguments(
             "bluearch_apply_remediation",
@@ -1154,6 +1190,19 @@ class StewardMcpServer:
                     cloudwatch_min_stored_bytes=arguments.get("cloudwatch_min_stored_bytes"),
                     exclude_tags=arguments.get("exclude_tags"),
                 ),
+                kubernetes_provider=arguments.get("_kubernetes_provider_instance"),
+                kubeconfig=arguments.get("kubeconfig"),
+                kubernetes_context=arguments.get("kubernetes_context"),
+                kubernetes_namespaces=tuple(arguments.get("kubernetes_namespaces") or ()),
+                kubernetes_excluded_namespaces=(
+                    tuple(arguments.get("kubernetes_excluded_namespaces") or ())
+                    if "kubernetes_excluded_namespaces" in arguments
+                    else None
+                ),
+                kubernetes_metrics_file=arguments.get("kubernetes_metrics_file"),
+                kubernetes_metrics_source=str(arguments.get("kubernetes_metrics_source") or "auto"),
+                eks_fixture_map=arguments.get("eks_fixture_map"),
+                eks_cluster_name=arguments.get("eks_cluster_name"),
             )
         except ValueError as exc:
             raise McpToolError(str(exc)) from exc
@@ -1210,6 +1259,9 @@ class StewardMcpServer:
             prepared, refinement = _prepare_assessment_refinement(arguments)
             if refinement is not None:
                 return refinement
+            eks_input = _eks_connection_input_required(prepared)
+            if eks_input is not None:
+                return eks_input
             prepared, blocked, aws_identity = self._prepare_live_aws_arguments(
                 "bluearch_assess",
                 prepared,
@@ -1222,6 +1274,9 @@ class StewardMcpServer:
             prepared, refinement = _prepare_assessment_refinement(arguments)
             if refinement is not None:
                 return refinement
+            eks_input = _eks_connection_input_required(prepared)
+            if eks_input is not None:
+                return eks_input
 
         if aws_identity is not None:
             prepared["_account_id"] = aws_identity.get("account_id")
@@ -1314,6 +1369,122 @@ class StewardMcpServer:
                 "Use a profile only after the user selects it when more than one profile is available. "
                 "Profile names are returned; credentials and SSO tokens are never returned."
             ),
+        }
+
+    def _tool_validate_eks_connection(self, arguments: JSON) -> JSON:
+        missing = [
+            key
+            for key in ("eks_cluster_name", "kubeconfig", "kubernetes_context")
+            if not str(arguments.get(key) or "").strip()
+        ]
+        if missing:
+            input_required = _eks_connection_input_required(arguments, required=missing)
+            if input_required is None:
+                raise McpToolError("Unable to construct the required EKS connection request.")
+            return input_required
+
+        prepared, blocked, identity = self._prepare_live_aws_arguments(
+            "bluearch_validate_eks_connection",
+            arguments,
+            require_region=True,
+            validate_identity=True,
+        )
+        if blocked is not None:
+            return blocked
+
+        cluster_name = str(prepared["eks_cluster_name"])
+        fixture_map = str(prepared.get("eks_fixture_map") or "").strip() or None
+        fixture_mode = bool(fixture_map)
+        if fixture_mode and not is_loopback_aws_endpoint(prepared.get("endpoint_url")):
+            raise McpToolError("eks_fixture_map is restricted to loopback AWS emulator endpoints.")
+        selected_client = self._aws_provider_factory(prepared)
+        response = selected_client.read("eks.describe_cluster", name=cluster_name)
+        cluster = response.get("cluster") or {}
+        if not cluster:
+            raise McpToolError(f"EKS cluster was not found: {cluster_name}")
+        try:
+            provider = KubernetesProvider(
+                KubernetesProviderConfig(
+                    kubeconfig=str(prepared["kubeconfig"]),
+                    context=str(prepared["kubernetes_context"]),
+                    namespaces=tuple(prepared.get("kubernetes_namespaces") or ()),
+                    excluded_namespaces=tuple(
+                        prepared.get("kubernetes_excluded_namespaces")
+                        or ("kube-node-lease", "kube-public")
+                    ),
+                    fixture_map=fixture_map,
+                    expected_cluster_name=(cluster_name if not fixture_mode else None),
+                    expected_endpoint=(cluster.get("endpoint") if not fixture_mode else None),
+                    expected_certificate_authority_data=(
+                        (cluster.get("certificateAuthority") or {}).get("data")
+                        if not fixture_mode
+                        else None
+                    ),
+                    require_loopback_endpoint=fixture_mode,
+                )
+            )
+            snapshot = provider.snapshot()
+        except KubernetesProviderError as exc:
+            reason = (
+                "eks_context_cluster_mismatch"
+                if "does not match EKS cluster" in str(exc)
+                else "eks_kubernetes_access_failed"
+            )
+            return {
+                "status": "input_required",
+                "ready": False,
+                "reason": reason,
+                "message": str(exc),
+                "resume": {
+                    "tool": "bluearch_validate_eks_connection",
+                    "arguments": _resume_arguments(prepared),
+                    "merge_user_input": ["kubeconfig", "kubernetes_context", "eks_cluster_name"],
+                },
+                "security": {
+                    "aws_writes": 0,
+                    "kubernetes_writes": 0,
+                    "sensitive_reads": [],
+                },
+            }
+
+        connection = snapshot.get("connection") or {}
+        account_id = str((identity or {}).get("account_id") or "")
+        capabilities = sorted(provider.capabilities())
+        return {
+            "status": "ready",
+            "connection": {
+                "aws_identity_validated": bool(identity and identity.get("validated")),
+                "aws_account_fingerprint": (
+                    hashlib.sha256(account_id.encode("utf-8")).hexdigest()[:12]
+                    if account_id
+                    else None
+                ),
+                "region": prepared["region"],
+                "cluster_name": cluster_name,
+                "kubernetes_context": snapshot.get("context"),
+                "context_cluster_match": bool(connection.get("context_cluster_match")),
+                "endpoint_match": bool(connection.get("endpoint_match")),
+                "certificate_authority_match": bool(connection.get("certificate_authority_match")),
+                "kubernetes_api_reachable": True,
+                "provider_allowlist_confirmed": set(capabilities)
+                == set(KUBERNETES_READ_OPERATIONS),
+            },
+            "capabilities": capabilities,
+            "resources_observed": {
+                "nodes": len(snapshot.get("nodes") or []),
+                "workloads": len(snapshot.get("workloads") or []),
+                "pods": len(snapshot.get("pods") or []),
+                "namespaces": len(snapshot.get("namespaces") or []),
+            },
+            "operations": {
+                "aws_reads": ["eks.describe_cluster"],
+                "kubernetes_reads": snapshot.get("read_operations") or [],
+                "aws_writes": 0,
+                "kubernetes_writes": int(snapshot.get("write_operations") or 0),
+            },
+            "sensitive_fields_read": snapshot.get("sensitive_fields_read") or [],
+            "identity_redacted": True,
+            "read_only": True,
         }
 
     def _tool_status(self, arguments: JSON) -> JSON:
@@ -1707,6 +1878,244 @@ class StewardMcpServer:
             source="live_refresh",
         )
 
+    def _tool_investigate_resource(self, arguments: JSON) -> JSON:
+        if arguments.get("resource") and not arguments.get("finding"):
+            eks_input = _eks_connection_input_required(arguments)
+            if eks_input is not None:
+                return eks_input
+            prepared, blocked, _identity = self._prepare_live_aws_arguments(
+                "bluearch_investigate_resource",
+                {**arguments, "service": "eks"},
+                require_region=True,
+                validate_identity=True,
+            )
+            if blocked is not None:
+                return blocked
+            return self._tool_investigate_kubernetes_resource(prepared)
+        source_finding = _resolve_one_finding(arguments)
+        prepared, blocked, identity = self._prepare_live_aws_arguments(
+            "bluearch_investigate_resource",
+            {
+                **arguments,
+                "finding": source_finding,
+                "service": source_finding.get("service"),
+            },
+            require_region=True,
+            validate_identity=True,
+        )
+        if blocked is not None:
+            return blocked
+
+        live_finding, scan_result, selected_client = self._scan_live_finding(
+            source_finding,
+            prepared,
+        )
+        if live_finding is None:
+            rule = str(source_finding.get("rule_short_id") or "")
+            kind = investigation_kind(rule)
+            response = {
+                "status": "resolved_or_not_matched",
+                "assessment_id": arguments.get("assessment_id"),
+                "finding_id": source_finding.get("finding_id"),
+                "resource": source_finding.get("resource"),
+                "rule": rule,
+                "investigation": kind,
+                "live_revalidated": True,
+                "observed_at": scan_result.get("generated_at"),
+                "read_only": True,
+                "write_actions_applied": False,
+            }
+            if kind == "deletion_readiness":
+                response["deletion_readiness"] = {
+                    "status": "not_applicable",
+                    "safe_to_delete": False,
+                    "explanation": (
+                        "The selected finding did not reproduce in the fresh AWS state. "
+                        "Steward did not infer deletion safety from its absence."
+                    ),
+                }
+            else:
+                response["operational_diagnosis"] = {
+                    "status": "not_applicable",
+                    "root_cause_confirmed": False,
+                    "explanation": (
+                        "The selected finding did not reproduce in the fresh AWS state. Steward did "
+                        "not infer a root cause or recommend a change from stale evidence."
+                    ),
+                }
+            return response
+
+        dossier = investigate_finding(
+            selected_client,
+            live_finding,
+            aws_context={
+                **(identity or {}),
+                "provider": _provider_name(prepared),
+                "region": prepared.get("region"),
+            },
+            confirmations=arguments.get("confirmations") or {},
+        )
+        dossier["assessment_id"] = arguments.get("assessment_id")
+        dossier["live_revalidated"] = True
+        dossier["finding_reproduced"] = True
+        dossier["finding_observed_at"] = scan_result.get("generated_at")
+        return dossier
+
+    def _tool_investigate_kubernetes_resource(self, arguments: JSON) -> JSON:
+        resource = str(arguments.get("resource") or "")
+        identity = _parse_kubernetes_resource_uri(resource)
+        if identity is None:
+            raise McpToolError(
+                "Direct resource investigation currently requires a k8s://context/namespace/kind/name URI."
+            )
+        context, namespace, kind, name = identity
+        requested_context = str(arguments.get("kubernetes_context") or context)
+        if requested_context != context:
+            raise McpToolError(
+                "The Kubernetes resource context does not match the selected assessment context."
+            )
+        cluster_name = str(arguments.get("eks_cluster_name") or "").strip()
+        if not cluster_name:
+            required = _eks_connection_input_required(arguments, required=["eks_cluster_name"])
+            if required is not None:
+                return required
+        selected_client = self._aws_provider_factory(arguments)
+        cluster = (
+            selected_client.read("eks.describe_cluster", name=cluster_name).get("cluster") or {}
+        )
+        if not cluster:
+            raise McpToolError(f"EKS cluster was not found: {cluster_name}")
+        try:
+            snapshot = KubernetesProvider(
+                KubernetesProviderConfig(
+                    kubeconfig=arguments.get("kubeconfig"),
+                    context=requested_context,
+                    namespaces=(namespace,),
+                    excluded_namespaces=tuple(
+                        arguments.get("kubernetes_excluded_namespaces") or ()
+                    ),
+                    metrics_file=arguments.get("kubernetes_metrics_file"),
+                    fixture_map=arguments.get("eks_fixture_map"),
+                    expected_cluster_name=cluster_name,
+                    expected_endpoint=cluster.get("endpoint"),
+                    expected_certificate_authority_data=(
+                        (cluster.get("certificateAuthority") or {}).get("data")
+                    ),
+                )
+            ).snapshot()
+        except KubernetesProviderError as exc:
+            raise McpToolError(str(exc)) from exc
+
+        collection = "pods" if kind.lower() == "pod" else "workloads"
+        selected = next(
+            (
+                item
+                for item in snapshot.get(collection) or []
+                if str(item.get("namespace")) == namespace
+                and str(item.get("name")) == name
+                and str(item.get("kind") or "").lower() == kind.lower()
+            ),
+            None,
+        )
+        if selected is None:
+            raise McpToolError(
+                f"Kubernetes resource was not found in the live snapshot: {resource}"
+            )
+
+        labels = (
+            selected.get("selector") or selected.get("pod_labels") or selected.get("labels") or {}
+        )
+        pods = [
+            item
+            for item in snapshot.get("pods") or []
+            if item.get("namespace") == namespace
+            and _labels_match(labels, item.get("labels") or {})
+        ]
+        services = [
+            item
+            for item in snapshot.get("services") or []
+            if item.get("namespace") == namespace
+            and _labels_match(item.get("selector") or {}, selected.get("pod_labels") or {})
+        ]
+        pdbs = [
+            item
+            for item in snapshot.get("pod_disruption_budgets") or []
+            if item.get("namespace") == namespace
+            and _labels_match(item.get("selector") or {}, selected.get("pod_labels") or {})
+        ]
+        events = [
+            item
+            for item in snapshot.get("events") or []
+            if item.get("namespace") == namespace
+            and str(item.get("involved_object_name") or "")
+            in {name, *(pod.get("name") for pod in pods)}
+        ][-20:]
+        pod_ready = [
+            any(
+                condition.get("type") == "Ready" and condition.get("status") == "True"
+                for condition in pod.get("conditions") or []
+            )
+            for pod in pods
+        ]
+        healthy = (
+            bool(pods)
+            and all(pod_ready)
+            and not any(str(event.get("type") or "").lower() == "warning" for event in events)
+        )
+        return {
+            "status": "completed",
+            "assessment_id": arguments.get("assessment_id"),
+            "resource": resource,
+            "investigation": "kubernetes_runtime",
+            "inside_cluster_evidence_collected": True,
+            "confirmed_observations": {
+                "workload": selected,
+                "pods": pods,
+                "services": services,
+                "pod_disruption_budgets": pdbs,
+                "events": events,
+            },
+            "operational_diagnosis": {
+                "status": "healthy" if healthy else "evidence_incomplete_or_unhealthy",
+                "root_cause_confirmed": False,
+                "explanation": (
+                    "The workload is running and Ready; Steward did not infer a problem."
+                    if healthy
+                    else "The snapshot is not sufficient to confirm one root cause."
+                ),
+            },
+            "evidence_missing": []
+            if healthy
+            else ["application logs and exec are outside the read contract"],
+            "kubernetes_read_operations": snapshot.get("read_operations") or [],
+            "sensitive_fields_read": snapshot.get("sensitive_fields_read") or [],
+            "environment_values_redacted": True,
+            "read_only": True,
+            "write_operations": int(snapshot.get("write_operations") or 0),
+            "write_actions_applied": False,
+        }
+
+    def _tool_generate_iac_patch(self, arguments: JSON) -> JSON:
+        finding = _resolve_one_finding(arguments)
+        if str(finding.get("service") or "") != "eks":
+            raise McpToolError(
+                "IaC patch generation currently supports only EKS and Kubernetes findings."
+            )
+        generated = generate_iac_patch(
+            finding,
+            str(arguments.get("format") or ""),
+            arguments.get("inputs") or {},
+        )
+        generated["assessment_id"] = arguments.get("assessment_id")
+        generated["finding_id"] = finding.get("finding_id")
+        return generated
+
+    def _tool_validate_iac_patch(self, arguments: JSON) -> JSON:
+        patch = arguments.get("patch")
+        if not isinstance(patch, dict):
+            raise McpToolError("patch must be a generated IaC patch object.")
+        return validate_iac_patch(patch)
+
     def _resolve_assessment_arguments(self, tool_name: str, arguments: JSON) -> JSON:
         assessment_id = _require_assessment_id(arguments)
         job = self._assessment(assessment_id, include_result=True)
@@ -1736,12 +2145,27 @@ class StewardMcpServer:
                 "logging_destination_bucket",
                 "logging_destination_prefix",
                 "exclude_tags",
+                "kubeconfig",
+                "kubernetes_context",
+                "kubernetes_namespaces",
+                "kubernetes_excluded_namespaces",
+                "kubernetes_metrics_file",
+                "kubernetes_metrics_source",
+                "eks_fixture_map",
+                "eks_cluster_name",
             }
         }
         merged.update(arguments)
 
         opportunities = result.get("complete_opportunities") or result.get("opportunities") or []
         finding_id = merged.get("finding_id")
+        if (
+            tool_name == "bluearch_investigate_resource"
+            and merged.get("resource")
+            and not finding_id
+        ):
+            merged.pop("finding", None)
+            return merged
         if tool_name == "bluearch_verify_remediation":
             selected = opportunities
             requested_ids = merged.get("finding_ids")
@@ -2088,6 +2512,11 @@ def _mentioned_services(text: str) -> set[str]:
         services.add("dynamodb")
     if any(token in text for token in ["efs", "elastic file system", "file system"]):
         services.add("efs")
+    if any(
+        token in text
+        for token in ["eks", "kubernetes", "k8s", "node group", "nodegroup", "pod", "helm"]
+    ):
+        services.add("eks")
     if any(token in text for token in ["ecs", "fargate", "task definition", "container service"]):
         services.add("ecs")
     if any(
@@ -2320,6 +2749,13 @@ def _objective_response_options() -> List[JSON]:
             "arguments": {"objective": "operations"},
         },
         {
+            "value": "performance_efficiency",
+            "label": "Improve performance efficiency",
+            "description": "Find workload pressure, scaling, and resource-sizing evidence.",
+            "user_response": "Prioritize performance efficiency.",
+            "arguments": {"objective": "performance_efficiency"},
+        },
+        {
             "value": "all",
             "label": "Run a comprehensive assessment",
             "description": "Evaluate every executable rule in the selected supported scope.",
@@ -2336,7 +2772,7 @@ def _service_response_options() -> List[JSON]:
             "label": "All supported services",
             "description": (
                 "Assess IAM, KMS, Secrets Manager, CloudTrail, CloudWatch Logs, DynamoDB, S3, "
-                "EC2/EBS, EFS, Lambda, ECS, RDS, SNS, SQS, API Gateway, and ALB resources."
+                "EC2/EBS, EFS, EKS/Kubernetes, Lambda, ECS, RDS, SNS, SQS, API Gateway, and ALB resources."
             ),
             "user_response": "Assess all currently supported AWS services.",
             "arguments": {"service": "all"},
@@ -2411,6 +2847,13 @@ def _service_response_options() -> List[JSON]:
             "description": "Assess task-definition and service platform controls.",
             "user_response": "Assess only ECS workloads.",
             "arguments": {"service": "ecs"},
+        },
+        {
+            "value": "eks",
+            "label": "EKS and Kubernetes workloads",
+            "description": "Assess EKS control plane, managed capacity, add-ons, workload configuration, runtime, and sizing.",
+            "user_response": "Assess only EKS clusters and Kubernetes workloads.",
+            "arguments": {"service": "eks"},
         },
         {
             "value": "alb",
@@ -2812,6 +3255,83 @@ def _region_input_required(tool_name: str, arguments: JSON, service: str) -> JSO
             "merge_user_input": ["region"],
         },
         "security": {"credentials_requested": False},
+    }
+
+
+def _eks_connection_input_required(
+    arguments: JSON,
+    *,
+    required: Optional[List[str]] = None,
+) -> Optional[JSON]:
+    if required is None:
+        kubernetes_requested = bool(
+            str(arguments.get("kubeconfig") or "").strip()
+            or str(arguments.get("kubernetes_context") or "").strip()
+        )
+        if not kubernetes_requested:
+            return None
+        required = []
+        if not str(arguments.get("eks_cluster_name") or "").strip():
+            required.append("eks_cluster_name")
+        if (
+            arguments.get("kubeconfig")
+            and not str(arguments.get("kubernetes_context") or "").strip()
+        ):
+            required.append("kubernetes_context")
+    required = list(dict.fromkeys(required))
+    if not required:
+        return None
+
+    labels = {
+        "eks_cluster_name": "Exact EKS cluster name",
+        "kubeconfig": "Path to one explicit kubeconfig file",
+        "kubernetes_context": "Exact kubeconfig context name",
+    }
+    properties = {
+        key: {
+            "type": "string",
+            "title": labels[key],
+            "description": (
+                "Steward uses this value to bind the Kubernetes API endpoint and certificate authority "
+                "to eks:DescribeCluster before reading workloads."
+            ),
+        }
+        for key in required
+    }
+    return {
+        "status": "input_required",
+        "ready": False,
+        "reason": "explicit_eks_connection_required",
+        "message": (
+            "Select one exact EKS cluster and kubeconfig context. Steward never uses the active "
+            "Kubernetes context implicitly."
+        ),
+        "questions": [
+            {
+                "id": key,
+                "prompt": labels[key],
+                "response_type": "text",
+            }
+            for key in required
+        ],
+        "input_request": {
+            "mode": "form",
+            "message": "Provide the explicit EKS connection binding.",
+            "requestedSchema": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
+        },
+        "resume": {
+            "tool": str(arguments.get("_resume_tool") or "bluearch_assess"),
+            "arguments": _resume_arguments(arguments),
+            "merge_user_input": required,
+        },
+        "security": {
+            "credentials_requested": False,
+            "write_performed": False,
+        },
     }
 
 
@@ -3227,6 +3747,56 @@ def _tools() -> List[JSON]:
             "additionalProperties": {"type": "string"},
             "description": "Optional resource tag exemptions as key/value pairs.",
         },
+        "kubeconfig": {
+            "type": "string",
+            "description": "Optional kubeconfig path for EKS workload assessment. File contents are never returned.",
+        },
+        "kubernetes_context": {
+            "type": "string",
+            "description": "Exact kubeconfig context selected by the user for EKS workload reads.",
+        },
+        "kubernetes_namespaces": {
+            "type": "array",
+            "items": {"type": "string"},
+            "uniqueItems": True,
+            "description": "Optional namespace allowlist for EKS workload assessment.",
+        },
+        "kubernetes_excluded_namespaces": {
+            "type": "array",
+            "items": {"type": "string"},
+            "uniqueItems": True,
+            "description": "Namespaces excluded from workload rules.",
+        },
+        "kubernetes_metrics_file": {
+            "type": "string",
+            "description": (
+                "Optional deterministic 14-day metrics JSON used only for synthetic historical "
+                "overprovisioning validation."
+            ),
+        },
+        "kubernetes_metrics_source": {
+            "type": "string",
+            "enum": ["auto", "cloudwatch", "file", "none"],
+            "default": "auto",
+            "description": (
+                "EKS pod metric source. Auto uses live Container Insights when a cluster is selected "
+                "and retains a supplied file only as synthetic historical evidence."
+            ),
+        },
+        "eks_cluster_name": {
+            "type": "string",
+            "description": (
+                "Exact EKS cluster name. Required whenever a Kubernetes context is supplied so Steward "
+                "can bind endpoint and CA to eks:DescribeCluster."
+            ),
+        },
+        "eks_fixture_map": {
+            "type": "string",
+            "description": (
+                "Optional JSON-compatible fixture-map.yml used only with loopback AWS and "
+                "Kubernetes endpoints in the hybrid EKS lab."
+            ),
+        },
     }
     assessment_properties: JSON = {
         "prompt": {
@@ -3326,6 +3896,30 @@ def _tools() -> List[JSON]:
         "service": {**assessment_properties["service"], "default": "all"},
     }
     return [
+        {
+            "name": "bluearch_validate_eks_connection",
+            "description": (
+                "Validate that an explicit kubeconfig context belongs to one exact EKS cluster before "
+                "workload reads. Compares the API endpoint and certificate authority with "
+                "eks:DescribeCluster, exercises only the Kubernetes read allowlist, and redacts AWS identity."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "provider": aws_options["provider"],
+                    "profile": aws_options["profile"],
+                    "region": aws_options["region"],
+                    "endpoint_url": aws_options["endpoint_url"],
+                    "eks_cluster_name": aws_options["eks_cluster_name"],
+                    "kubeconfig": aws_options["kubeconfig"],
+                    "kubernetes_context": aws_options["kubernetes_context"],
+                    "kubernetes_namespaces": aws_options["kubernetes_namespaces"],
+                    "kubernetes_excluded_namespaces": aws_options["kubernetes_excluded_namespaces"],
+                },
+                "required": ["eks_cluster_name", "kubeconfig", "kubernetes_context"],
+                "additionalProperties": False,
+            },
+        },
         {
             "name": "bluearch_assess",
             "description": (
@@ -3567,6 +4161,85 @@ def _tools() -> List[JSON]:
             },
         },
         {
+            "name": "bluearch_investigate_resource",
+            "description": (
+                "Revalidate one assessment finding and build its rule-specific read-only investigation. "
+                "Deletion-readiness playbooks cover EBS, Elastic IP, inactive ECS task definitions, inactive "
+                "EFS, unused Lambda, and idle RDS. Operational diagnosis covers RDS CPU, rightsizing, read "
+                "scaling, and exposure findings plus ECS health, platform, and task-definition findings. "
+                "Every result separates hypotheses from confirmed evidence and never applies changes."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "assessment_id": {"type": "string"},
+                    "finding_id": {"type": "string"},
+                    "resource": {
+                        "type": "string",
+                        "description": (
+                            "Optional k8s:// resource URI for a healthy-state investigation when no "
+                            "finding exists."
+                        ),
+                    },
+                    "confirmations": {
+                        "type": "object",
+                        "description": (
+                            "Optional explicit human confirmations. They remain separate from AWS evidence "
+                            "and never become an automatic deletion authorization."
+                        ),
+                        "properties": {
+                            "owner_approved": {"type": "boolean"},
+                            "iac_references_reviewed": {"type": "boolean"},
+                            "backup_restore_reviewed": {"type": "boolean"},
+                            "external_dependencies_reviewed": {"type": "boolean"},
+                            "change_window_confirmed": {"type": "boolean"},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "required": ["assessment_id"],
+                "anyOf": [{"required": ["finding_id"]}, {"required": ["resource"]}],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "bluearch_generate_iac_patch",
+            "description": (
+                "Generate a planning-only patch for one EKS or Kubernetes finding. The result contains "
+                "reviewable file fragments and a digest but never modifies source files or a cluster."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "assessment_id": {"type": "string"},
+                    "finding_id": {"type": "string"},
+                    "format": {"type": "string", "enum": list(IAC_PATCH_FORMATS)},
+                    "inputs": {
+                        "type": "object",
+                        "description": (
+                            "Application-specific values selected by the user, such as probe settings, "
+                            "reviewed resource values, or restricted endpoint CIDRs."
+                        ),
+                    },
+                },
+                "required": ["assessment_id", "finding_id", "format"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "bluearch_validate_iac_patch",
+            "description": (
+                "Validate a Steward-generated IaC patch in a temporary directory. Validation is local, "
+                "does not modify source files, and performs no cluster or AWS writes."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {"patch": {"type": "object"}},
+                "required": ["patch"],
+                "additionalProperties": False,
+            },
+        },
+        {
             "name": "bluearch_get_coverage",
             "description": (
                 "Show all bundled catalog rules, their evaluation modes, the executable detector slice, "
@@ -3780,6 +4453,7 @@ def _assert_smoke(responses: List[JSON]) -> None:
     tool_names = {tool["name"] for tool in responses[1]["result"]["tools"]}
     expected_tools = {
         "bluearch_assess",
+        "bluearch_validate_eks_connection",
         "bluearch_import_findings",
         "bluearch_list_aws_profiles",
         "bluearch_get_scan_status",
@@ -3787,6 +4461,9 @@ def _assert_smoke(responses: List[JSON]) -> None:
         "bluearch_query_results",
         "bluearch_cancel_assessment",
         "bluearch_get_resource_details",
+        "bluearch_investigate_resource",
+        "bluearch_generate_iac_patch",
+        "bluearch_validate_iac_patch",
         "bluearch_get_coverage",
         "bluearch_status",
         "bluearch_advise",
@@ -3886,6 +4563,26 @@ def _require_assessment_id(arguments: JSON) -> str:
     return assessment_id
 
 
+def _parse_kubernetes_resource_uri(resource: str) -> Optional[Tuple[str, str, str, str]]:
+    if not resource.startswith("k8s://"):
+        return None
+    parts = resource[len("k8s://") :].split("/", 3)
+    if len(parts) != 4 or not all(parts):
+        return None
+    return parts[0], parts[1], parts[2], parts[3]
+
+
+def _labels_match(selector: Any, labels: Any) -> bool:
+    if not isinstance(selector, dict) or not selector:
+        return False
+    if not isinstance(labels, dict):
+        return False
+    match_labels = selector.get("match_labels") if "match_labels" in selector else selector
+    if not isinstance(match_labels, dict) or not match_labels:
+        return False
+    return all(str(labels.get(key)) == str(value) for key, value in match_labels.items())
+
+
 def _public_assessment_result(result: JSON) -> JSON:
     items = complete_result_items(result)
     public = {
@@ -3941,9 +4638,12 @@ def _finding_from_opportunity(opportunity: JSON) -> JSON:
         "rule_short_id": rule,
         "service": opportunity.get("service"),
         "resource": opportunity.get("resource"),
+        "resource_ref": opportunity.get("resource_ref"),
         "severity": opportunity.get("severity"),
         "risk_detail": opportunity.get("risk"),
         "scenario": opportunity.get("why"),
+        "cost_estimate": opportunity.get("cost_estimate"),
+        "priority": opportunity.get("priority"),
         "evidence": opportunity.get("evidence") or {},
         "remediation": opportunity.get("remediation") or {},
     }
@@ -4425,6 +5125,19 @@ def _run_scan_payload(
             cloudwatch_min_stored_bytes=arguments.get("cloudwatch_min_stored_bytes"),
             exclude_tags=arguments.get("exclude_tags"),
         ),
+        kubernetes_provider=arguments.get("_kubernetes_provider_instance"),
+        kubeconfig=arguments.get("kubeconfig"),
+        kubernetes_context=arguments.get("kubernetes_context"),
+        kubernetes_namespaces=tuple(arguments.get("kubernetes_namespaces") or ()),
+        kubernetes_excluded_namespaces=(
+            tuple(arguments.get("kubernetes_excluded_namespaces") or ())
+            if "kubernetes_excluded_namespaces" in arguments
+            else None
+        ),
+        kubernetes_metrics_file=arguments.get("kubernetes_metrics_file"),
+        kubernetes_metrics_source=str(arguments.get("kubernetes_metrics_source") or "auto"),
+        eks_fixture_map=arguments.get("eks_fixture_map"),
+        eks_cluster_name=arguments.get("eks_cluster_name"),
         progress_callback=arguments.get("_progress_callback"),
         partial_callback=publish_partial if callable(partial_sink) else None,
         cancel_event=arguments.get("_cancel_event"),
@@ -4699,6 +5412,8 @@ def _tool_find_opportunities(
     rules_skipped = scan_summary.get("rules_skipped") or []
     capability_errors = scan_summary.get("capability_errors") or []
     detection_coverage = scan_summary.get("detection_coverage") or {}
+    service_name = str(scan_result.get("service") or arguments.get("service") or "unknown")
+    service_summaries = scan_summary.get("service_summaries") or {service_name: scan_summary}
     payload = {
         "objective": objective,
         "service": arguments.get("service") or scan_result.get("service") or "s3",
@@ -4734,7 +5449,7 @@ def _tool_find_opportunities(
             or [scan_result.get("service")],
             "services_scanned": scan_summary.get("services_scanned")
             or [scan_result.get("service")],
-            "service_summaries": scan_summary.get("service_summaries") or {},
+            "service_summaries": service_summaries,
             "detection_coverage": detection_coverage,
             "unified_recommendation_queue": bool(scan_summary.get("unified_recommendation_queue")),
             "signal_snapshots": int(scan_summary.get("signal_snapshots") or 0),

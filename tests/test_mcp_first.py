@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
 from threading import Event
+from unittest.mock import patch
 
 from bluearch_aws_steward.assessments import AssessmentStore
 from bluearch_aws_steward.aws_context import discover_aws_context
@@ -17,6 +19,10 @@ from bluearch_aws_steward.mcp_server import (
     run_mcp_stdio_server,
 )
 from bluearch_aws_steward.providers.base import AwsProviderError
+from bluearch_aws_steward.providers.kubernetes import (
+    KUBERNETES_READ_OPERATIONS,
+    KubernetesProviderError,
+)
 
 
 def _finding() -> dict:
@@ -49,6 +55,54 @@ def _scan_result() -> dict:
         "profile": "test-profile",
         "region": "us-east-1",
         "findings": [_finding()],
+        "summary": {"findings": 1, "resources_scanned": 1, "scan_errors": 0},
+    }
+
+
+def _ebs_scan_result() -> dict:
+    return {
+        "schema_version": "0.2",
+        "generated_at": "2026-07-21T12:00:00Z",
+        "service": "ec2",
+        "provider": "aws-sdk",
+        "profile": "test-profile",
+        "region": "us-east-1",
+        "findings": [
+            {
+                "finding_id": "steward-ebs-test",
+                "rule_id": "ec2-unattached-ebs-volume",
+                "rule_short_id": "ec2-unattached-ebs-volume",
+                "service": "ec2",
+                "resource": "ebs://vol-123",
+                "resource_ref": {
+                    "provider": "aws",
+                    "service": "ec2",
+                    "resource_type": "aws.ec2.volume",
+                    "resource_id": "vol-123",
+                    "region": "us-east-1",
+                },
+                "severity": "low",
+                "risk_detail": "cost, operations",
+                "scenario": "An EBS volume has remained unattached.",
+                "evidence": {
+                    "volume_id": "vol-123",
+                    "state": "available",
+                    "attachments": [],
+                    "cost_estimate": {
+                        "status": "estimated",
+                        "estimated_monthly_savings_usd": 8.0,
+                        "confidence": "medium",
+                    },
+                },
+                "remediation": {
+                    "summary": "Review, snapshot, and delete only after approval.",
+                    "safety_level": "planning_only",
+                    "requires_approval": True,
+                    "actions": ["Confirm dependencies and recovery first."],
+                    "verification": "Confirm the reviewed volume no longer exists.",
+                },
+            }
+        ],
         "summary": {"findings": 1, "resources_scanned": 1, "scan_errors": 0},
     }
 
@@ -106,6 +160,65 @@ class MutableVersioningProvider:
     def assert_bucket(self, bucket: str) -> None:
         if bucket != "example-bucket":
             raise AssertionError(f"unexpected bucket: {bucket}")
+
+
+class ReadOnlyEbsInvestigationProvider:
+    def __init__(self) -> None:
+        self.writes: list[str] = []
+        self.read_operations: list[str] = []
+
+    def caller_identity(self) -> dict:
+        return {
+            "Account": "123456789012",
+            "Arn": "arn:aws:sts::123456789012:assumed-role/Developer/test",
+        }
+
+    def list_ebs_volumes(self) -> list[dict]:
+        return [
+            {
+                "volume_id": "vol-123",
+                "state": "available",
+                "size_gib": 100,
+                "volume_type": "gp3",
+                "availability_zone": "us-east-1a",
+                "encrypted": True,
+                "created_at": "2026-01-01T00:00:00Z",
+                "attachments": [],
+                "tags": {"owner": "platform"},
+            }
+        ]
+
+    def read(self, operation: str, **_: object) -> dict:
+        self.read_operations.append(operation)
+        if operation == "ec2.describe_volumes":
+            return {
+                "Volumes": [
+                    {
+                        "VolumeId": "vol-123",
+                        "State": "available",
+                        "Size": 100,
+                        "VolumeType": "gp3",
+                        "AvailabilityZone": "us-east-1a",
+                        "Encrypted": True,
+                        "CreateTime": datetime(2026, 1, 1, tzinfo=timezone.utc),
+                        "Attachments": [],
+                        "Tags": [{"Key": "owner", "Value": "platform"}],
+                    }
+                ]
+            }
+        if operation == "ec2.describe_snapshots":
+            return {
+                "Snapshots": [
+                    {
+                        "SnapshotId": "snap-123",
+                        "State": "completed",
+                        "StartTime": datetime(2026, 7, 20, tzinfo=timezone.utc),
+                    }
+                ]
+            }
+        if operation == "config.describe_configuration_recorders":
+            return {"ConfigurationRecorders": []}
+        raise AssertionError(f"unexpected read operation: {operation}")
 
 
 class AssessmentStoreTests(unittest.TestCase):
@@ -358,7 +471,7 @@ class McpFirstWorkflowTests(unittest.TestCase):
         config = mcp_client_config(
             runtime="uvx",
             uvx_executable="/usr/local/bin/uvx",
-            package_version="0.7.0b4",
+            package_version="0.8.0b1",
         )["mcpServers"]["bluearch-aws-steward"]
 
         self.assertEqual(config["command"], "/usr/local/bin/uvx")
@@ -366,7 +479,7 @@ class McpFirstWorkflowTests(unittest.TestCase):
             config["args"],
             [
                 "--from",
-                "bluearch-aws-steward==0.7.0b4",
+                "bluearch-aws-steward==0.8.0b1",
                 "bluearch-steward-mcp",
             ],
         )
@@ -380,11 +493,15 @@ class McpFirstWorkflowTests(unittest.TestCase):
         tools = {tool["name"]: tool for tool in list_mcp_tools()}
         expected = {
             "bluearch_assess",
+            "bluearch_validate_eks_connection",
             "bluearch_list_aws_profiles",
             "bluearch_get_scan_status",
             "bluearch_get_scan_results",
             "bluearch_export_report",
             "bluearch_get_resource_details",
+            "bluearch_investigate_resource",
+            "bluearch_generate_iac_patch",
+            "bluearch_validate_iac_patch",
             "bluearch_get_coverage",
             "bluearch_status",
         }
@@ -425,6 +542,190 @@ class McpFirstWorkflowTests(unittest.TestCase):
             "generate_pdf_report",
             tools["bluearch_get_scan_results"]["inputSchema"]["properties"],
         )
+        assess_properties = tools["bluearch_assess"]["inputSchema"]["properties"]
+        self.assertIn("eks_cluster_name", assess_properties)
+        self.assertEqual(
+            assess_properties["kubernetes_metrics_source"]["enum"],
+            ["auto", "cloudwatch", "file", "none"],
+        )
+        self.assertEqual(
+            tools["bluearch_validate_eks_connection"]["inputSchema"]["required"],
+            ["eks_cluster_name", "kubeconfig", "kubernetes_context"],
+        )
+
+    def test_assess_requires_explicit_cluster_for_kubernetes_context_before_aws_reads(self) -> None:
+        server = StewardMcpServer(
+            aws_context_loader=lambda: (_ for _ in ()).throw(
+                AssertionError("AWS context must not be read before EKS binding input is complete")
+            )
+        )
+
+        response = _call(
+            server,
+            7,
+            "bluearch_assess",
+            {
+                "prompt": "Assess this EKS cluster",
+                "service": "eks",
+                "objective": "all",
+                "assessment_mode": "full_report",
+                "kubeconfig": "/tmp/selected-kubeconfig",
+            },
+        )
+
+        self.assertEqual(response["status"], "input_required")
+        self.assertEqual(response["reason"], "explicit_eks_connection_required")
+        self.assertEqual(
+            response["resume"]["merge_user_input"],
+            ["eks_cluster_name", "kubernetes_context"],
+        )
+
+    def test_validate_eks_connection_proves_cluster_binding_and_read_only_access(self) -> None:
+        class EksProvider:
+            def read(self, operation: str, **_: object) -> dict:
+                self.operation = operation
+                return {
+                    "cluster": {
+                        "name": "demo-cluster",
+                        "endpoint": "https://eks.example.test",
+                        "certificateAuthority": {"data": "Y2E="},
+                    }
+                }
+
+        class KubernetesConnection:
+            def capabilities(self) -> set[str]:
+                return set(KUBERNETES_READ_OPERATIONS)
+
+            def snapshot(self) -> dict:
+                return {
+                    "context": "demo-context",
+                    "connection": {
+                        "context_cluster_match": True,
+                        "endpoint_match": True,
+                        "certificate_authority_match": True,
+                    },
+                    "nodes": [{}],
+                    "workloads": [{}],
+                    "pods": [{}],
+                    "namespaces": ["demo"],
+                    "read_operations": ["core.list_nodes", "core.list_pods"],
+                    "write_operations": 0,
+                    "sensitive_fields_read": [],
+                }
+
+        provider = EksProvider()
+        server = StewardMcpServer(
+            aws_context_loader=lambda: _aws_context(
+                {"name": "test-profile", "kind": "sso", "region": "us-east-1"},
+                active_profile="test-profile",
+            ),
+            aws_identity_loader=lambda _: {
+                "Account": "123456789012",
+                "Arn": "arn:aws:sts::123456789012:assumed-role/test/session",
+            },
+            aws_provider_factory=lambda _: provider,
+        )
+        with patch(
+            "bluearch_aws_steward.mcp_server.KubernetesProvider",
+            return_value=KubernetesConnection(),
+        ):
+            response = _call(
+                server,
+                8,
+                "bluearch_validate_eks_connection",
+                {
+                    "profile": "test-profile",
+                    "region": "us-east-1",
+                    "eks_cluster_name": "demo-cluster",
+                    "kubeconfig": "/tmp/demo.kubeconfig",
+                    "kubernetes_context": "demo-context",
+                },
+            )
+
+        self.assertEqual(response["status"], "ready")
+        self.assertTrue(response["connection"]["context_cluster_match"])
+        self.assertTrue(response["connection"]["provider_allowlist_confirmed"])
+        self.assertEqual(response["operations"]["aws_reads"], ["eks.describe_cluster"])
+        self.assertEqual(response["operations"]["kubernetes_writes"], 0)
+        self.assertEqual(provider.operation, "eks.describe_cluster")
+
+    def test_validate_eks_connection_rejects_mismatched_context(self) -> None:
+        class EksProvider:
+            def read(self, *_: object, **__: object) -> dict:
+                return {
+                    "cluster": {
+                        "endpoint": "https://vulnerable.example.test",
+                        "certificateAuthority": {"data": "Y2E="},
+                    }
+                }
+
+        server = StewardMcpServer(
+            aws_context_loader=lambda: _aws_context(
+                {"name": "test-profile", "kind": "sso", "region": "us-east-1"},
+                active_profile="test-profile",
+            ),
+            aws_identity_loader=lambda _: {
+                "Account": "123456789012",
+                "Arn": "arn:aws:sts::123456789012:assumed-role/test/session",
+            },
+            aws_provider_factory=lambda _: EksProvider(),
+        )
+        with patch(
+            "bluearch_aws_steward.mcp_server.KubernetesProvider",
+            side_effect=KubernetesProviderError(
+                "Kubernetes context 'healthy' does not match EKS cluster 'vulnerable': "
+                "API endpoint differs from eks:DescribeCluster."
+            ),
+        ):
+            response = _call(
+                server,
+                9,
+                "bluearch_validate_eks_connection",
+                {
+                    "profile": "test-profile",
+                    "region": "us-east-1",
+                    "eks_cluster_name": "vulnerable",
+                    "kubeconfig": "/tmp/healthy.kubeconfig",
+                    "kubernetes_context": "healthy",
+                },
+            )
+
+        self.assertEqual(response["status"], "input_required")
+        self.assertEqual(response["reason"], "eks_context_cluster_mismatch")
+        self.assertEqual(response["security"]["aws_writes"], 0)
+
+    def test_validate_eks_connection_rejects_fixture_map_for_real_aws(self) -> None:
+        server = StewardMcpServer(
+            aws_context_loader=lambda: _aws_context(
+                {"name": "test-profile", "kind": "sso", "region": "us-east-1"},
+                active_profile="test-profile",
+            ),
+            aws_identity_loader=lambda _: {
+                "Account": "123456789012",
+                "Arn": "arn:aws:sts::123456789012:assumed-role/test/session",
+            },
+            aws_provider_factory=lambda _: self.fail(
+                "The AWS provider must not be created for an unsafe fixture map."
+            ),
+        )
+
+        with self.assertRaisesRegex(
+            AssertionError,
+            "eks_fixture_map is restricted to loopback AWS emulator endpoints",
+        ):
+            _call(
+                server,
+                10,
+                "bluearch_validate_eks_connection",
+                {
+                    "profile": "test-profile",
+                    "region": "us-east-1",
+                    "eks_cluster_name": "demo-cluster",
+                    "kubeconfig": "/tmp/demo.kubeconfig",
+                    "kubernetes_context": "demo-context",
+                    "eks_fixture_map": "/tmp/fixture-map.yml",
+                },
+            )
 
     def test_pdf_export_writes_binary_without_embedding_it_in_json(self) -> None:
         store = AssessmentStore(lambda _: _scan_result())
@@ -522,6 +823,10 @@ class McpFirstWorkflowTests(unittest.TestCase):
         )
         self.assertTrue(results["ready"])
         self.assertEqual(results["observed_at"], "2026-07-13T12:00:00Z")
+        self.assertEqual(
+            results["result"]["summary"]["service_summaries"]["s3"]["resources_scanned"],
+            1,
+        )
         self.assertFalse(results["freshness"]["persistent_inventory"])
         self.assertFalse(results["pdf_report_offer"]["accepted"])
         cards = results["result"]["solution_cards"]
@@ -576,6 +881,57 @@ class McpFirstWorkflowTests(unittest.TestCase):
         self.assertIn("allow_write=true", response["result"]["content"][0]["text"])
         self.assertEqual(provider.writes, [])
 
+    def test_assessment_to_read_only_deletion_investigation_flow(self) -> None:
+        provider = ReadOnlyEbsInvestigationProvider()
+        server = StewardMcpServer(
+            aws_context_loader=lambda: _aws_context(
+                {"name": "test-profile", "kind": "sso", "region": "us-east-1"},
+                active_profile="test-profile",
+            ),
+            aws_provider_factory=lambda _: provider,
+        )
+        started = _call(
+            server,
+            1,
+            "bluearch_assess",
+            {
+                "prompt": "Review an unattached EBS volume without changes",
+                "objective": "cost_optimization",
+                "service": "ec2",
+                "scan_result": _ebs_scan_result(),
+            },
+        )
+        assessment_id = started["assessment_id"]
+        server._assessments.wait(assessment_id, timeout=2)
+        results = _call(
+            server,
+            2,
+            "bluearch_get_scan_results",
+            {"assessment_id": assessment_id, "generate_pdf_report": False},
+        )
+        finding_id = results["result"]["solution_cards"][0]["solution_id"]
+
+        dossier = _call(
+            server,
+            3,
+            "bluearch_investigate_resource",
+            {"assessment_id": assessment_id, "finding_id": finding_id},
+        )
+
+        self.assertTrue(dossier["live_revalidated"])
+        self.assertEqual(dossier["deletion_readiness"]["status"], "needs_context")
+        self.assertFalse(dossier["deletion_readiness"]["safe_to_delete"])
+        self.assertFalse(dossier["write_actions_applied"])
+        self.assertEqual(provider.writes, [])
+        self.assertEqual(
+            provider.read_operations,
+            [
+                "ec2.describe_volumes",
+                "ec2.describe_snapshots",
+                "config.describe_configuration_recorders",
+            ],
+        )
+
     def test_status_and_coverage_do_not_require_cli(self) -> None:
         server = StewardMcpServer()
         status = _call(server, 1, "bluearch_status", {"check_aws": False})
@@ -584,12 +940,12 @@ class McpFirstWorkflowTests(unittest.TestCase):
         self.assertTrue(status["mcp_first"])
         self.assertEqual(status["default_provider"], "aws-sdk")
         self.assertFalse(status["state"]["persistent_inventory"])
-        self.assertEqual(coverage["rule_count"], 100)
-        self.assertEqual(coverage["catalog_rule_count"], 631)
-        self.assertEqual(coverage["automated_rule_count"], 100)
-        self.assertEqual(coverage["unevaluated_rule_count"], 531)
+        self.assertEqual(coverage["rule_count"], 120)
+        self.assertEqual(coverage["catalog_rule_count"], 649)
+        self.assertEqual(coverage["automated_rule_count"], 120)
+        self.assertEqual(coverage["unevaluated_rule_count"], 529)
         self.assertEqual(coverage["rules_by_evaluation_mode"]["manual_review"], 117)
-        self.assertEqual(status["coverage"]["catalog_rules"], 631)
+        self.assertEqual(status["coverage"]["catalog_rules"], 649)
         self.assertEqual(
             {service["service"] for service in coverage["services"]},
             {
@@ -603,6 +959,7 @@ class McpFirstWorkflowTests(unittest.TestCase):
                 "lambda",
                 "efs",
                 "ecs",
+                "eks",
                 "alb",
                 "api-gateway",
                 "kms",
