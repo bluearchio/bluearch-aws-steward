@@ -5,7 +5,7 @@ AWS Steward can test discovery, detection, remediation planning, write safety,
 and verification without touching a real AWS account.
 
 LocalEmu 1.1.0 is the default emulator. The deterministic suite requires a
-positive finding for all 100 executable rules across 16 runtime scopes through
+positive finding for all 100 AWS-only executable rules across 16 runtime scopes through
 the AWS SDK provider, AWS CLI provider, and actual stdio MCP server.
 
 Eighty-eight rules use only resources and metric datapoints created through
@@ -140,6 +140,7 @@ findings remain isolated to the intended rules.
 | Public admin-port and unused security groups, low/high CPU EC2 instances, EBS volumes, snapshot, and default VPC | Exercises EC2, EBS, and networking rules. |
 | Admin-role, shared-role, unused, timeout, memory-pressure, throttled, and high-error Lambda functions | Exercises all Lambda rules. |
 | Unsafe and inactive ECS task definitions plus outdated and degraded Fargate service | Exercises all ECS rules. |
+| Healthy ECS service with a long-running, non-privileged BusyBox task | Proves that LocalEmu can start a real Docker-backed ECS task and provides a healthy control. |
 | HTTP-only and weak-TLS ALBs, target groups, and short-lived ACM certificate | Exercises all ALB rules. |
 | Customer-managed symmetric KMS key with rotation disabled | Exercises KMS rotation detection. |
 | Secrets Manager secret without rotation | Exercises metadata-only secret rotation detection. |
@@ -149,6 +150,35 @@ findings remain isolated to the intended rules.
 
 Dynamic EC2 identifiers are matched by URI pattern. Fixture tags are validated
 inside the setup scripts and are not copied into user-facing finding evidence.
+
+## ECS And EKS Boundaries
+
+The ECS fixture includes an actual long-running container. Assertions inspect
+the task definition, task status, and container status and require the healthy
+task to be `RUNNING`. LocalEmu 1.1.0 does not reliably reconcile ECS service
+`runningCount` and `pendingCount`, so those counters are not used as proof of
+container health. That divergence remains useful for the separate degraded
+service finding.
+
+LocalEmu can create and describe an EKS control-plane object, including endpoint
+access, logging, encryption, and version fields. In the tested release the
+cluster settles in `CREATE_FAILED`, and its generated Kubernetes endpoint is
+not a reachable API server. Therefore:
+
+- AWS-side EKS rule fixtures may use LocalEmu for deterministic control-plane
+  responses;
+- Kubernetes workload, scheduling, probe, rollout, and live debugging tests
+  must use a real local cluster such as `kind`;
+- static manifests and provider stubs remain appropriate for isolated unit
+  tests, but cannot be presented as a functional cluster proof;
+- production validation still requires an approved read-only AWS EKS sandbox.
+
+The implemented EKS fixture pack is intentionally hybrid: LocalEmu owns the AWS
+API surface and `kind` owns the Kubernetes API and workloads. Steward correlates
+the two fixture identities without claiming that either emulator reproduces the
+managed EKS data plane. Run it separately with `make eks-lab-full`; see
+[`../eks-lab/README.md`](../eks-lab/README.md). The regular
+`make emulator-coverage` gate remains the 100-rule AWS-only baseline.
 
 ## Useful Targets
 

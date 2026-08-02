@@ -58,8 +58,8 @@ Expected behavior:
 - If the selected SSO session is expired, Codex shows the local sign-in action and waits.
 - The successful response identifies the AWS SDK provider, selected region, and caller identity.
 - Codex calls `bluearch_get_coverage` if detailed coverage is requested.
-- The result reports all 631 knowledge rules and their evaluation modes, plus
-  100 canonical executable rules across 16 runtime scopes.
+- The result reports all 649 knowledge rules and their evaluation modes, plus
+  120 canonical executable rules across 17 runtime scopes.
 - Codex states that the remaining 531 catalog entries are not canonical native
   rules rather than treating them as passed.
 - No AWS write occurs.

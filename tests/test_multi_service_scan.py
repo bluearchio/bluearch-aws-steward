@@ -506,6 +506,7 @@ class MultiServiceDetectorTests(unittest.TestCase):
                 "rds",
                 "lambda",
                 "efs",
+                "eks",
                 "ecs",
                 "alb",
                 "kms",
@@ -519,14 +520,14 @@ class MultiServiceDetectorTests(unittest.TestCase):
             {finding.rule_short_id for finding in result.findings},
             {"cloudwatch-log-retention-missing", "ec2-unattached-ebs-volume"},
         )
-        self.assertEqual(progress[-1]["services_completed"], 16)
+        self.assertEqual(progress[-1]["services_completed"], 17)
         self.assertEqual(progress[-1]["findings_discovered"], 2)
         self.assertEqual(progress[-1]["resources_scanned"], 11)
         coverage = result.summary["detection_coverage"]
-        self.assertEqual(coverage["catalog_rules_in_scope"], 631)
-        self.assertEqual(coverage["automated_rules_available"], 100)
+        self.assertEqual(coverage["catalog_rules_in_scope"], 649)
+        self.assertEqual(coverage["automated_rules_available"], 120)
         self.assertEqual(coverage["automated_rules_evaluated"], 23)
-        self.assertEqual(coverage["unevaluated_catalog_rules"], 608)
+        self.assertEqual(coverage["unevaluated_catalog_rules"], 626)
         self.assertFalse(coverage["complete_catalog_evaluation"])
 
     def test_all_service_rule_filter_skips_unrelated_provider_calls(self) -> None:
@@ -569,6 +570,7 @@ class MultiServiceDetectorTests(unittest.TestCase):
                 "rds",
                 "lambda",
                 "efs",
+                "eks",
                 "ecs",
                 "alb",
                 "kms",
@@ -580,9 +582,9 @@ class MultiServiceDetectorTests(unittest.TestCase):
         )
         self.assertEqual(result.summary["service_errors"][0]["service"], "cloudwatch")
         coverage = result.summary["detection_coverage"]
-        self.assertEqual(coverage["automated_rules_available"], 100)
+        self.assertEqual(coverage["automated_rules_available"], 120)
         self.assertEqual(coverage["automated_rules_evaluated"], 22)
-        self.assertEqual(coverage["automated_rules_not_evaluated"], 78)
+        self.assertEqual(coverage["automated_rules_not_evaluated"], 98)
         self.assertFalse(coverage["complete_catalog_evaluation"])
         self.assertEqual(
             {finding.rule_short_id for finding in result.findings},
@@ -655,6 +657,8 @@ class MultiServiceMcpTests(unittest.TestCase):
                 "efs-inactive-unmounted",
                 "efs-lifecycle-policy-missing",
                 "efs-throughput-overprovisioned",
+                "eks-workload-overprovisioned",
+                "k8s-workload-missing-resource-requests",
                 "lambda-high-error-rate",
                 "lambda-memory-underutilized",
                 "lambda-provisioned-concurrency-underused",
@@ -698,6 +702,7 @@ class MultiServiceMcpTests(unittest.TestCase):
                 "rds",
                 "lambda",
                 "efs",
+                "eks",
                 "ecs",
                 "alb",
                 "kms",
@@ -733,7 +738,7 @@ class MultiServiceMcpTests(unittest.TestCase):
         self.assertEqual(payload["summary"]["returned_rules"], 2)
         self.assertEqual(
             payload["summary"]["services_scanned"],
-            ["cloudwatch", "dynamodb", "s3", "ec2", "rds", "lambda", "efs", "alb"],
+            ["cloudwatch", "dynamodb", "s3", "ec2", "rds", "lambda", "efs", "eks", "alb"],
         )
         self.assertTrue(payload["summary"]["incomplete"])
         self.assertGreater(len(payload["rules_skipped"]), 0)

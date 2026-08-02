@@ -13,8 +13,8 @@ telemetry, or a local AWS inventory database. AWS remains the source of truth.
 
 ## What It Provides
 
-- 100 native rules across 16 runtime scopes.
-- Searchable knowledge for all 631 `aws-misconfig-db` catalog entries.
+- 120 native rules across 17 runtime scopes, including a 20-rule EKS/Kubernetes pack.
+- Searchable knowledge for all 649 `aws-misconfig-db` catalog entries.
 - Point-in-time, read-only assessments using user-owned AWS credentials.
 - MCP-native clarification for objective, service, profile, and Region.
 - Guided, focused, and full-report assessment modes with multi-objective and
@@ -42,23 +42,28 @@ reviewed AWS or IaC fix and post-fix verification. See
 
 ## Install
 
-Steward requires Python 3.10 or newer. The recommended `uv` installer can
-manage a compatible Python runtime and works on macOS and Linux:
+Steward requires Python 3.10 or newer. A standard Python installation creates
+an isolated environment and installs the complete application from PyPI:
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade bluearch-aws-steward
+bluearch-steward --version
+bluearch-steward mcp smoke
 ```
 
-On macOS, Homebrew is also supported:
+On Windows, activate the environment with `.venv\Scripts\activate`. EKS and
+Kubernetes support is included in the standard package; there is no separate
+EKS extra to install. AWS CLI, `kubectl`, Terraform/OpenTofu, Helm, Kustomize,
+Docker, and `kind` are external tools and are required only by workflows that
+explicitly use them.
+
+For a persistent command that is isolated without manually managing a virtual
+environment, install the same complete wheel with `uv`:
 
 ```bash
-brew install uv
-```
-
-The intended public installation is a persistent, isolated `uv` tool:
-
-```bash
-uv tool install 'bluearch-aws-steward==0.7.0b4'
+uv tool install --upgrade bluearch-aws-steward
 uv tool update-shell
 bluearch-steward --version
 bluearch-steward mcp smoke
@@ -83,13 +88,9 @@ a version-pinned `uvx` configuration:
 bluearch-steward mcp config --runtime uvx
 ```
 
-The package is not published yet. The tag-only preview workflow builds and
-validates the exact distribution, publishes it to TestPyPI, and creates a draft
-GitHub prerelease. PyPI publication starts only when a maintainer manually
-publishes that draft release. Ordinary pushes and pull requests cannot publish
-packages.
-
-Until then, install a repository checkout:
+Published packages are available from PyPI. The complete EKS-inclusive package
+contract starts with `0.8.0b1`; until that candidate is published, PyPI still
+serves the previous preview. To test the current checkout or contribute:
 
 ```bash
 git clone https://github.com/bluearchio/bluearch-aws-steward.git
@@ -210,6 +211,7 @@ Primary tools:
 | Tool | Purpose | AWS write |
 | --- | --- | --- |
 | `bluearch_assess` | Resolve intent and start a background assessment. | No |
+| `bluearch_validate_eks_connection` | Bind one explicit kubeconfig context to one EKS endpoint and CA before workload reads. | No |
 | `bluearch_list_aws_profiles` | List non-secret AWS profile metadata for user selection. | No |
 | `bluearch_import_findings` | Import supported external finding JSON into an ephemeral assessment. | No |
 | `bluearch_get_scan_status` | Return progress without repeating work. | No |
@@ -218,9 +220,12 @@ Primary tools:
 | `bluearch_export_report` | Export a completed result, including local PDF with charts. | No |
 | `bluearch_cancel_assessment` | Stop pending work and preserve completed reads. | No |
 | `bluearch_get_resource_details` | Inspect or refresh one matched resource. | No |
+| `bluearch_investigate_resource` | Revalidate one finding and build its deletion-readiness or operational-diagnosis dossier with live evidence, dependencies, hypotheses, impact, confidence, and a planning-only change preview. | No |
+| `bluearch_generate_iac_patch` | Generate a reviewable EKS/Kubernetes patch fragment without modifying files or clusters. | No |
+| `bluearch_validate_iac_patch` | Validate a generated patch in a temporary directory. | No |
 | `bluearch_get_coverage` | Report catalog and native detector coverage. | No |
 | `bluearch_status` | Check runtime, AWS identity, and rule coverage. | No |
-| `bluearch_rules_search` | Search all 631 catalog rules. | No |
+| `bluearch_rules_search` | Search all 649 catalog rules. | No |
 | `bluearch_explain_finding` | Explain evidence and impact. | No |
 | `bluearch_plan_remediation` | Revalidate and create a short-lived plan. | No |
 | `bluearch_apply_remediation` | Apply an exact approved plan. | Guarded |
@@ -233,21 +238,21 @@ user flow is MCP.
 
 `bluearch_get_coverage` reports:
 
-| Measure | v0.7.0b4 |
+| Measure | v0.8.0b1 candidate |
 | --- | ---: |
-| Catalog rules | 631 |
-| Native canonical rules | 100 |
+| Catalog rules | 649 |
+| Native canonical rules | 120 |
 | Native aliases | 7 |
-| Runtime scopes | 16 |
-| Catalog automation | 15.85% |
+| Runtime scopes | 17 |
+| Catalog automation | 18.49% |
 
 Runtime scopes are `iam`, `cloudtrail`, `cloudwatch`, `dynamodb`, `s3`, `ec2`,
-`rds`, `lambda`, `efs`, `ecs`, `alb`, `kms`, `secrets-manager`, `sns`, `sqs`,
-and `api-gateway`. The aliases `ebs` and `networking` route to the EC2 collector
+`rds`, `lambda`, `efs`, `ecs`, `eks`, `alb`, `kms`, `secrets-manager`, `sns`,
+`sqs`, and `api-gateway`. The aliases `ebs` and `networking` route to the EC2 collector
 and do not increase the canonical rule count.
 
-All 100 current rules have `access_tier: free`. This is the stable open-source
-baseline. Future canonical rules beyond this baseline are reserved for a
+All 120 current rules have `access_tier: free`. The original 100-rule AWS pack
+and the 20-rule EKS/Kubernetes pack are the open-source baseline. Future canonical rules are reserved for a
 `premium` tier unless the project governance explicitly promotes them. v0.7.0
 does not add hosted login, licensing calls, or telemetry; entitlement enforcement
 is a separate future boundary.
@@ -262,7 +267,7 @@ rule list and evidence type.
 
 ## Release Status
 
-The current `0.7.0b4` work is a release candidate, not a published stable release.
+The current `0.8.0b1` work is a release candidate, not a published stable release.
 Public-preview and stable-release gates are tracked in
 [`docs/public-release-readiness.md`](docs/public-release-readiness.md). The
 planned progressive result experience is documented in
@@ -280,6 +285,41 @@ Read access is generated from the typed operation registry:
 
 Keep those policies on separate roles. Routine assessment needs only the read
 policy.
+
+### Read-Only Investigations
+
+Call `bluearch_investigate_resource` with an assessment and finding ID before
+proposing a change. It selects one of two contracts:
+
+- deletion readiness for unattached EBS volumes, unassociated Elastic IPs,
+  inactive ECS task-definition revisions, inactive unmounted EFS file systems,
+  unused Lambda functions, and idle RDS instances;
+- operational diagnosis for RDS CPU, rightsizing, read-scaling, and public
+  exposure findings plus ECS service health, platform-version, and unsafe
+  task-definition findings.
+
+Investigators re-read live AWS, inspect direct relationships and recovery or
+runtime evidence, use AWS Config relationships when a recorder is available,
+and return unresolved business, IaC, application, and external-dependency
+questions. Operational hypotheses are never presented as confirmed root cause.
+
+The dossier reports evidence coverage separately from deletion readiness. It
+never treats a missing permission, disabled AWS Config recorder, absent metric,
+or zero observed relationships as proof that deletion is safe. Human
+confirmations are recorded separately from AWS evidence. Even a
+`candidate_for_approval` remains `safe_to_delete: false`; deletion and address
+release stay planning-only.
+
+EKS investigations correlate control-plane, node group, managed add-on, node,
+workload, pod, Service, PDB, HPA, ingress, and event evidence. Kubernetes access
+requires an explicit `kubernetes_context` and `eks_cluster_name`; a supplied
+kubeconfig never causes Steward to use its active context implicitly. Steward
+compares the selected API endpoint and CA fingerprint with
+`eks:DescribeCluster` before reading workloads. Access is allowlisted and cannot read
+Secrets or logs, execute commands, proxy traffic,
+port-forward, or write resources. EKS and Kubernetes remediation is always
+planning-only through generated Terraform, CloudFormation, eksctl, Kubernetes
+YAML, Helm, or Kustomize fragments.
 
 Most findings are planning-only. Guarded apply is limited to:
 
@@ -328,13 +368,14 @@ MCP client
 
 Service collectors run with bounded concurrency. A service snapshot is reused
 between its rules, and `rule_filter` narrows both rules and AWS calls.
-Twenty-four signal rules batch CloudWatch `GetMetricData` requests through an
+Twenty-seven signal rules batch CloudWatch `GetMetricData` requests or consume
+explicit assessment-local Kubernetes historical metric fixtures through an
 assessment-local cache. Missing metric data is unknown, never zero.
 
 This release does not include multi-account traversal, all-Region orchestration,
 IaC scanning, attack graphs, hosted history, telemetry, or an AWS MCP provider.
-See [`docs/expansion-plan.md`](docs/expansion-plan.md) for the planned rule,
-LocalEmu, EKS, performance, and IaC remediation expansion path.
+See [`docs/expansion-plan.md`](docs/expansion-plan.md) for multi-account,
+cross-Region, source mapping, performance, and IaC remediation expansion.
 
 ## Development
 
@@ -365,6 +406,32 @@ twelve historical, account-level, metric-dimension, or synthetic-size states use
 a test-only loopback response overlay documented in
 [`tests/aws-emulator/rule-map.yml`](tests/aws-emulator/rule-map.yml).
 LocalEmu remains running unless `make emulator-down` is called.
+
+Run the complete hybrid EKS product gate with Docker, `kind`, and `kubectl`:
+
+```bash
+uv sync --dev
+make eks-lab-full
+```
+
+This resets a disposable `kind` cluster, validates all 20 EKS/Kubernetes rules
+through one real MCP stdio process, investigates every rule, validates six IaC
+formats, applies one patch only through the test harness, re-scans, and exports
+a PDF. The MCP operation log must contain zero writes.
+
+The manual, billable AWS parity gate creates separate vulnerable and healthy
+EKS clusters in an explicitly allowlisted sandbox account:
+
+```bash
+make eks-aws-lab-preflight
+make eks-aws-lab-plan
+make eks-aws-lab-full
+```
+
+It validates a wheel-installed runtime, endpoint/CA binding, EKS access entries,
+read-only RBAC, real Container Insights datapoints, every rule and investigation,
+CloudTrail/audit logs, reports, and mandatory teardown. Read the required safety
+controls in [`tests/aws-eks-live/README.md`](tests/aws-eks-live/README.md) first.
 
 For a manual read-only AWS validation:
 

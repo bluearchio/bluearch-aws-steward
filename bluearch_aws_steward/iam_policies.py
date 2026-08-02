@@ -41,9 +41,35 @@ def build_policy(actions: Iterable[str], *, sid: str) -> JSON:
     }
 
 
+def build_read_policy(actions: Iterable[str]) -> JSON:
+    action_set = set(actions)
+    ssm_actions = sorted(action_set & {"ssm:GetParameter"})
+    global_actions = sorted(action_set - set(ssm_actions))
+    statements: list[JSON] = []
+    if global_actions:
+        statements.append(
+            {
+                "Sid": "BlueArchStewardReadOnly",
+                "Effect": "Allow",
+                "Action": global_actions,
+                "Resource": "*",
+            }
+        )
+    if ssm_actions:
+        statements.append(
+            {
+                "Sid": "BlueArchStewardReadEksAmiMetadata",
+                "Effect": "Allow",
+                "Action": ssm_actions,
+                "Resource": "arn:aws:ssm:*::parameter/aws/service/eks/optimized-ami/*",
+            }
+        )
+    return {"Version": "2012-10-17", "Statement": statements}
+
+
 def generated_policies() -> Dict[Path, JSON]:
     return {
-        READ_POLICY_PATH: build_policy(read_actions(), sid="BlueArchStewardReadOnly"),
+        READ_POLICY_PATH: build_read_policy(read_actions()),
         REMEDIATION_POLICY_PATH: build_policy(
             remediation_actions(),
             sid="BlueArchStewardApprovedRemediation",

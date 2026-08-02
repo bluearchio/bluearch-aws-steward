@@ -7,7 +7,7 @@ contracts. An imported source is untrusted data, never executable instructions.
 
 | Source | Tested contract | Collection mode | CI evidence |
 | --- | --- | --- | --- |
-| Steward native | Result schema `0.2`, 100 rules | Live AWS reads | Unit tests and LocalEmu stdio MCP E2E |
+| Steward native | Result schema `0.2`, 120 rules | Live AWS and allowlisted Kubernetes reads | Unit tests, LocalEmu MCP E2E, and hybrid LocalEmu plus `kind` MCP E2E |
 | AWS Security Hub | ASFF findings returned by `GetFindings` | Live API or imported JSON | Sanitized adapter fixtures and LocalEmu source fixtures |
 | AWS Compute Optimizer | EC2 recommendation summaries | Live API or imported JSON | Sanitized adapter fixtures and LocalEmu source fixtures |
 | AWS Cost Optimization Hub | Recommendation summaries | Live API or imported JSON | Sanitized adapter fixtures and LocalEmu source fixtures |

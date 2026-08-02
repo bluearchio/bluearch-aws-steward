@@ -145,6 +145,23 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="KEY=VALUE",
         help="Exclude resources matching a tag. May be repeated.",
     )
+    scan_aws.add_argument("--kubeconfig", default=None)
+    scan_aws.add_argument("--kubernetes-context", default=None)
+    scan_aws.add_argument("--kubernetes-namespace", action="append", default=None)
+    scan_aws.add_argument("--kubernetes-exclude-namespace", action="append", default=None)
+    scan_aws.add_argument("--kubernetes-metrics-file", default=None)
+    scan_aws.add_argument(
+        "--kubernetes-metrics-source",
+        choices=("auto", "cloudwatch", "file", "none"),
+        default="auto",
+        help="Select live Container Insights metrics, a fixture file, automatic selection, or none.",
+    )
+    scan_aws.add_argument(
+        "--eks-cluster-name",
+        default=None,
+        help="Exact EKS cluster to bind to the selected kubeconfig context.",
+    )
+    scan_aws.add_argument("--eks-fixture-map", default=None)
     scan_aws.set_defaults(func=_scan_aws)
 
     dashboard = subparsers.add_parser("dashboard", help="Open an interactive live scan dashboard.")
@@ -397,6 +414,18 @@ def _scan_aws(args: argparse.Namespace) -> int:
         bucket_prefix=args.bucket_prefix,
         rule_filter=args.rule_filter,
         policy=policy,
+        kubeconfig=args.kubeconfig,
+        kubernetes_context=args.kubernetes_context,
+        kubernetes_namespaces=tuple(args.kubernetes_namespace or ()),
+        kubernetes_excluded_namespaces=(
+            tuple(args.kubernetes_exclude_namespace or ())
+            if args.kubernetes_exclude_namespace is not None
+            else None
+        ),
+        kubernetes_metrics_file=args.kubernetes_metrics_file,
+        kubernetes_metrics_source=args.kubernetes_metrics_source,
+        eks_fixture_map=args.eks_fixture_map,
+        eks_cluster_name=args.eks_cluster_name,
     )
 
     payload = result.to_dict()

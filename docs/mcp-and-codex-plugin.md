@@ -214,6 +214,7 @@ questions on the user's behalf.
 | `bluearch_import_findings` | Normalize Security Hub, Prowler, Compute Optimizer, or Cost Optimization Hub JSON into an ephemeral assessment. | No |
 | `bluearch_status` | Check runtime, credentials, caller identity, and coverage. | No |
 | `bluearch_assess` | Refine intent, resolve AWS context, then start a background assessment and return an ID. | No |
+| `bluearch_validate_eks_connection` | Verify one explicit kubeconfig context against an exact EKS endpoint and CA before workload reads. | No |
 | `bluearch_get_scan_status` | Poll the existing assessment without repeating AWS work. | No |
 | `bluearch_get_scan_results` | Return grouped solution cards; `include_partial: true` exposes findings collected so far. | No |
 | `bluearch_query_results` | Filter, facet, sort, and paginate the complete snapshot without rescanning. | No |
@@ -230,6 +231,14 @@ questions on the user's behalf.
 `bluearch_advise`, `bluearch_scan_aws`, `bluearch_find_opportunities`, and
 `bluearch_doctor` remain available for backwards
 compatibility and advanced clients. New clients should use the primary tools.
+
+For EKS workload reads, pass `eks_cluster_name`, `kubeconfig`, and
+`kubernetes_context`. Call `bluearch_validate_eks_connection` first. Steward
+rejects a context whose API endpoint or CA fingerprint differs from
+`eks:DescribeCluster`; it never falls back to the active context. Select
+`kubernetes_metrics_source=auto` for live Container Insights CPU/memory signals
+plus an explicitly supplied, clearly synthetic historical file for the 14-day
+overprovisioning validation.
 
 ## Agent Flow
 
@@ -432,15 +441,17 @@ native detector.
 
 ## Coverage And Safety
 
-The complete bundled catalog contains 631 rules across 47 catalog service
-groups. It includes 100 canonical `native` rules, seven catalog aliases, 117
-`manual_review`, 191 `metadata_required`, five `signal_required`, and 211
+The complete bundled catalog contains 649 rules across 48 catalog service
+groups. It includes 120 canonical `native` rules, seven catalog aliases, 117
+`manual_review`, 191 `metadata_required`, five `signal_required`, and 209
 `specification_required` entries. Only canonical native rules produce live
 pass/fail results; aliases never increase the executable coverage count.
 
-The executable registry covers 100 canonical rules across 16 runtime scopes:
+The executable registry covers 120 canonical rules across 17 runtime scopes:
 IAM, KMS, Secrets Manager, CloudTrail, CloudWatch Logs, DynamoDB, S3, EC2,
-EFS, Lambda, ECS, RDS, SNS, SQS, API Gateway, and ALB.
+EFS, Lambda, ECS, RDS, SNS, SQS, API Gateway, ALB, and EKS. EKS includes
+allowlisted Kubernetes workload and runtime evidence when the optional `eks`
+dependency and a reachable kubeconfig context are available.
 `ebs` and `networking` route to the EC2 collector. Guarded apply is limited to
 `s3-public-bucket`, `s3-no-default-encryption`, `s3-no-lifecycle`,
 `s3-server-access-logging-disabled`, `s3-versioning-disabled`,
@@ -454,6 +465,12 @@ conditions during planning and again before applying, but never creates or
 updates the destination policy. Every other rule is planning-only until its
 write path has dedicated permission, impact, rollback, precondition, and
 verification controls.
+
+For EKS and Kubernetes findings, `bluearch_generate_iac_patch` produces a
+digest-bound planning fragment in Terraform, CloudFormation, eksctl,
+Kubernetes YAML, Helm, or Kustomize form. `bluearch_validate_iac_patch` validates
+that fragment in a temporary directory. Neither tool edits source or a cluster,
+and `bluearch_apply_remediation` rejects EKS/Kubernetes findings.
 
 Every live result includes `summary.detection_coverage`. Clients must report
 that object and must not call an account or service fully clean when

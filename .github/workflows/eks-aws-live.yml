@@ -1,0 +1,93 @@
+name: EKS AWS live validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      nginx_image:
+        description: Immutable nginx image reference ending in @sha256:...
+        required: true
+        type: string
+      busybox_image:
+        description: Immutable busybox image reference ending in @sha256:...
+        required: true
+        type: string
+      python_image:
+        description: Immutable Python image reference ending in @sha256:...
+        required: true
+        type: string
+      ttl_hours:
+        description: Maximum lab lifetime, 1-8 hours
+        required: true
+        default: "8"
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: eks-aws-live-validation
+  cancel-in-progress: false
+
+jobs:
+  live-validation:
+    name: Disposable sandbox EKS gate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 480
+    environment: eks-aws-validation
+    env:
+      AWS_REGION: us-east-1
+      EKS_LAB_ALLOWED_ACCOUNT_ID: ${{ secrets.EKS_LAB_ALLOWED_ACCOUNT_ID }}
+      EKS_LAB_ADMIN_CIDR: ${{ secrets.EKS_LAB_ADMIN_CIDR }}
+      EKS_LAB_NGINX_IMAGE: ${{ inputs.nginx_image }}
+      EKS_LAB_BUSYBOX_IMAGE: ${{ inputs.busybox_image }}
+      EKS_LAB_PYTHON_IMAGE: ${{ inputs.python_image }}
+      EKS_LAB_TTL_HOURS: ${{ inputs.ttl_hours }}
+      EKS_LAB_BUDGET_USD: "30"
+      EKS_LAB_USE_ENV_CREDENTIALS: "true"
+      BLUEARCH_EKS_LAB_ACK: I_UNDERSTAND_THIS_IS_DESTRUCTIVE
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.13.5"
+          terraform_wrapper: false
+      - name: Install locked Steward environment
+        run: |
+          python -m pip install --disable-pip-version-check "uv==0.11.28"
+          uv sync --extra eks --dev --no-editable --locked
+          terraform version
+          aws --version
+          kubectl version --client
+      - name: Configure sandbox AWS credentials
+        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # v5.1.0
+        with:
+          role-to-assume: ${{ secrets.EKS_LAB_OIDC_ROLE_ARN }}
+          role-session-name: bluearch-steward-eks-provisioner
+          aws-region: us-east-1
+          mask-aws-account-id: true
+      - name: Run the real AWS EKS gate
+        run: make eks-aws-lab-full
+      - name: Enforce teardown again
+        if: always()
+        run: |
+          if [[ -f tests/aws-eks-live/.artifacts/preflight.json ]]; then
+            make eks-aws-lab-down
+          fi
+      - name: Upload redacted receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: eks-aws-live-receipts-${{ github.run_id }}
+          path: tests/aws-eks-live/.artifacts/*-receipt.json
+          if-no-files-found: warn
+          retention-days: 7

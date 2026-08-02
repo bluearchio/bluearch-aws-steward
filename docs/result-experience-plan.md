@@ -148,6 +148,34 @@ Initial preview targets:
 2. Add complete facets and cursor pagination through `bluearch_query_results`.
 3. Add priority explanations and effort/blast-radius fields.
 4. Add local ownership and policy-pack schema.
+
+## Deletion-Readiness Evidence
+
+The first implementation covers unattached EBS volumes, unassociated Elastic
+IPs, inactive ECS task definitions, inactive unmounted EFS file systems, unused
+Lambda functions, and idle RDS instances through `bluearch_investigate_resource`.
+The same tool produces operational-diagnosis dossiers for RDS CPU, rightsizing,
+read-scaling, and exposure findings plus ECS health, platform, and unsafe
+task-definition findings. It produces a separate read-only dossier after a
+finding is revalidated. The dossier distinguishes:
+
+- live AWS facts and observed relationships;
+- recovery evidence and its limitations;
+- selected ownership and environment tags;
+- optional AWS Config and Route 53 relationship coverage;
+- capability errors and evidence that could not be collected; and
+- explicit human confirmations that cannot be inferred from AWS.
+
+Evidence coverage is not a safety probability. The tool never reports a
+resource as safe to delete, and missing relationships or permissions remain
+unknown rather than passing. IaC/source references, application traffic,
+external DNS, allowlists, and business procedures remain future evidence
+adapters.
+
+Operational dossiers additionally distinguish observed facts, unconfirmed
+hypotheses, missing logs/traces/code context, planning-only candidate changes,
+and post-change verification. `root_cause_confirmed` remains false until a
+future investigator obtains service-specific evidence that supports that claim.
 5. Add expiring suppression and accepted-risk records.
 6. Run the multi-account recommendation-quality benchmark.
 7. Promote the contract to stable only after thresholds are met.

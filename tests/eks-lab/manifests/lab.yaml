@@ -1,0 +1,349 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bluearch-eks-lab
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: healthy-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: healthy-api}
+  template:
+    metadata:
+      labels: {app: healthy-api}
+    spec:
+      nodeSelector: {eks.amazonaws.com/nodegroup: skew-ng}
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          ports: [{containerPort: 80}]
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {cpu: 250m, memory: 128Mi}
+          readinessProbe: {httpGet: {path: /, port: 80}, initialDelaySeconds: 1, periodSeconds: 2}
+          livenessProbe: {httpGet: {path: /, port: 80}, initialDelaySeconds: 2, periodSeconds: 3}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: healthy-api
+  namespace: bluearch-eks-lab
+spec:
+  selector: {app: healthy-api}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: healthy-api
+  namespace: bluearch-eks-lab
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: {app: healthy-api}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: missing-requests-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: missing-requests-api}}
+  template:
+    metadata: {labels: {app: missing-requests-api}}
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources: {limits: {cpu: 250m, memory: 128Mi}}
+          readinessProbe: {httpGet: {path: /, port: 80}}
+          livenessProbe: {httpGet: {path: /, port: 80}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: missing-memory-limit-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: missing-memory-limit-api}}
+  template:
+    metadata: {labels: {app: missing-memory-limit-api}}
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources: {requests: {cpu: 50m, memory: 32Mi}, limits: {cpu: 250m}}
+          readinessProbe: {httpGet: {path: /, port: 80}}
+          livenessProbe: {httpGet: {path: /, port: 80}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: missing-probes-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: missing-probes-api}}
+  template:
+    metadata: {labels: {app: missing-probes-api}}
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          ports: [{containerPort: 80}]
+          resources: {requests: {cpu: 50m, memory: 32Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: missing-probes-api
+  namespace: bluearch-eks-lab
+spec:
+  selector: {app: missing-probes-api}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unprotected-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: unprotected-api}}
+  template:
+    metadata: {labels: {app: unprotected-api}}
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources: {requests: {cpu: 50m, memory: 32Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          readinessProbe: {httpGet: {path: /, port: 80}}
+          livenessProbe: {httpGet: {path: /, port: 80}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unprotected-api
+  namespace: bluearch-eks-lab
+spec:
+  selector: {app: unprotected-api}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: privileged-worker
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: privileged-worker}}
+  template:
+    metadata: {labels: {app: privileged-worker}}
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: [sh, -c, "sleep 36000"]
+          resources: {requests: {cpu: 10m, memory: 8Mi}, limits: {cpu: 100m, memory: 32Mi}}
+          readinessProbe: {exec: {command: [sh, -c, "true"]}}
+          livenessProbe: {exec: {command: [sh, -c, "true"]}}
+          securityContext: {privileged: true, allowPrivilegeEscalation: true}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crashloop-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: crashloop-api}}
+  template:
+    metadata: {labels: {app: crashloop-api}}
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: [sh, -c, "echo fixture-crash >&2; exit 17"]
+          resources: {requests: {cpu: 10m, memory: 8Mi}, limits: {cpu: 100m, memory: 32Mi}}
+          readinessProbe: {exec: {command: [sh, -c, "true"]}}
+          livenessProbe: {exec: {command: [sh, -c, "true"]}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unschedulable-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: unschedulable-api}}
+  template:
+    metadata: {labels: {app: unschedulable-api}}
+    spec:
+      nodeSelector: {bluearch.io/nonexistent-pool: required}
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources: {requests: {cpu: 50m, memory: 32Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          readinessProbe: {httpGet: {path: /, port: 80}}
+          livenessProbe: {httpGet: {path: /, port: 80}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-pressure-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: cpu-pressure-api}}
+  template:
+    metadata: {labels: {app: cpu-pressure-api}}
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: [sh, -c, "while true; do :; done"]
+          resources: {requests: {cpu: 50m, memory: 8Mi}, limits: {cpu: 100m, memory: 32Mi}}
+          readinessProbe: {exec: {command: [sh, -c, "true"]}}
+          livenessProbe: {exec: {command: [sh, -c, "true"]}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cpu-pressure-api
+  namespace: bluearch-eks-lab
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: cpu-pressure-api}
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-pressure-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: memory-pressure-api}}
+  template:
+    metadata: {labels: {app: memory-pressure-api}}
+    spec:
+      nodeSelector: {eks.amazonaws.com/nodegroup: degraded-ng}
+      containers:
+        - name: app
+          image: python:3.13-alpine
+          command: [python, -c, "x = bytearray(64 * 1024 * 1024); import time; time.sleep(3600)"]
+          resources: {requests: {cpu: 10m, memory: 8Mi}, limits: {cpu: 100m, memory: 16Mi}}
+          readinessProbe: {exec: {command: [python, -c, "print('ok')"]}}
+          livenessProbe: {exec: {command: [python, -c, "print('ok')"]}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: overprovisioned-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: overprovisioned-api}}
+  template:
+    metadata: {labels: {app: overprovisioned-api}}
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources: {requests: {cpu: 500m, memory: 512Mi}, limits: {cpu: 1, memory: 1Gi}}
+          readinessProbe: {httpGet: {path: /, port: 80}}
+          livenessProbe: {httpGet: {path: /, port: 80}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balanced-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: balanced-api}}
+  template:
+    metadata: {labels: {app: balanced-api}}
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources: {requests: {cpu: 500m, memory: 512Mi}, limits: {cpu: 1, memory: 1Gi}}
+          readinessProbe: {httpGet: {path: /, port: 80}}
+          livenessProbe: {httpGet: {path: /, port: 80}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-healthy-api
+  namespace: bluearch-eks-lab
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: runtime-healthy-api}}
+  template:
+    metadata: {labels: {app: runtime-healthy-api}}
+    spec:
+      nodeSelector: {eks.amazonaws.com/nodegroup: old-ami-ng}
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          resources: {requests: {cpu: 50m, memory: 32Mi}, limits: {cpu: 250m, memory: 128Mi}}
+          readinessProbe: {httpGet: {path: /, port: 80}}
+          livenessProbe: {httpGet: {path: /, port: 80}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aws-node-fixture
+  namespace: kube-system
+  labels: {bluearch.io/steward-exempt: "true"}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: aws-node-fixture}}
+  template:
+    metadata: {labels: {app: aws-node-fixture, bluearch.io/steward-exempt: "true"}}
+    spec:
+      containers:
+        - name: aws-node
+          image: busybox:1.36
+          command: [sh, -c, "exit 1"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coredns-fixture
+  namespace: kube-system
+  labels: {bluearch.io/steward-exempt: "true"}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: coredns-fixture}}
+  template:
+    metadata: {labels: {app: coredns-fixture, bluearch.io/steward-exempt: "true"}}
+    spec:
+      containers:
+        - name: coredns
+          image: busybox:1.36
+          command: [sh, -c, "sleep 36000"]

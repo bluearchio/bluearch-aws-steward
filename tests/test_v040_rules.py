@@ -684,9 +684,9 @@ class V040RuleTests(unittest.TestCase):
 
         self.assertEqual(
             sum(rule.evaluation_kind == "configuration" for rule in rules),
-            76,
+            93,
         )
-        self.assertEqual(sum(rule.evaluation_kind == "signal" for rule in rules), 24)
+        self.assertEqual(sum(rule.evaluation_kind == "signal" for rule in rules), 27)
 
     def test_all_29_new_rules_accept_healthy_resources(self) -> None:
         result = run_aws_scan(

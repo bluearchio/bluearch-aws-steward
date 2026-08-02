@@ -7,16 +7,22 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Dict, Iterable, Tuple
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from defusedxml import ElementTree as DefusedET
 from defusedxml.common import DefusedXmlException
 
-from bluearch_aws_steward.aws_endpoints import is_loopback_aws_endpoint
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from bluearch_aws_steward.aws_endpoints import is_loopback_aws_endpoint  # noqa: E402
 
 ENDPOINT_TOKEN = "__FIXTURE_ENDPOINT__"
 OLD_TIMESTAMP = "2020-01-01T00:00:00Z"
@@ -166,6 +172,7 @@ class _FixtureProxyHandler(BaseHTTPRequestHandler):
             target,
             service=signed_service,
             request_path=self.path,
+            request_body=request_body,
         )
         if signal_fixture is not None:
             self.send_response(200)
@@ -237,9 +244,16 @@ def fixture_signal_response(
     *,
     service: str = "",
     request_path: str = "",
+    request_body: bytes = b"",
 ) -> bytes | None:
     normalized_target = re.sub(r"[^a-z0-9]", "", target.lower())
     normalized_path = urlsplit(request_path).path.lower()
+    if service == "eks":
+        return _eks_fixture_response(request_path)
+    if service == "guardduty":
+        return _guardduty_fixture_response(normalized_target, request_body)
+    if service == "ssm" and "getparameter" in normalized_target:
+        return _ssm_fixture_response(request_body)
     if "getfindings" in normalized_target or (
         service == "securityhub" and "finding" in normalized_path
     ):
@@ -327,6 +341,247 @@ def fixture_signal_response(
             }
         )
     return None
+
+
+def _eks_fixture_response(request_path: str) -> bytes | None:
+    parsed = urlsplit(request_path)
+    path = unquote(parsed.path).strip("/")
+    parts = path.split("/") if path else []
+    query = parse_qs(parsed.query)
+    vulnerable = "bluearch-eks-vulnerable"
+    healthy = "bluearch-eks-healthy"
+
+    if path in {"clusters", "clusters/"}:
+        return _json_bytes({"clusters": [vulnerable, healthy]})
+    if path in {"cluster-versions", "clusters/versions"}:
+        return _json_bytes(
+            {
+                "clusterVersions": [
+                    {
+                        "clusterVersion": "1.30",
+                        "versionStatus": "EXTENDED_SUPPORT",
+                        "endOfStandardSupportDate": "2025-06-23T00:00:00Z",
+                        "endOfExtendedSupportDate": "2026-06-23T00:00:00Z",
+                    },
+                    {
+                        "clusterVersion": "1.31",
+                        "versionStatus": "STANDARD_SUPPORT",
+                        "endOfStandardSupportDate": "2028-01-01T00:00:00Z",
+                        "endOfExtendedSupportDate": "2029-01-01T00:00:00Z",
+                    },
+                ]
+            }
+        )
+    if path == "addons/supported-versions":
+        addon_name = str((query.get("addonName") or [""])[0])
+        version = "v1.99.0-eksbuild.1" if addon_name == "coredns" else "v1.0.0-eksbuild.1"
+        return _json_bytes(
+            {
+                "addons": [
+                    {
+                        "addonName": addon_name,
+                        "addonVersions": [
+                            {
+                                "addonVersion": version,
+                                "compatibilities": [{"defaultVersion": True}],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+    if len(parts) == 2 and parts[0] == "clusters":
+        cluster_name = parts[1]
+        healthy_cluster = cluster_name == healthy
+        return _json_bytes(
+            {
+                "cluster": {
+                    "name": cluster_name,
+                    "arn": f"arn:aws:eks:us-east-1:000000000000:cluster/{cluster_name}",
+                    "status": "ACTIVE",
+                    "version": "1.31" if healthy_cluster else "1.30",
+                    "endpoint": "https://127.0.0.1.invalid",
+                    "roleArn": "arn:aws:iam::000000000000:role/bluearch-eks-lab",
+                    "resourcesVpcConfig": {
+                        "endpointPublicAccess": True,
+                        "endpointPrivateAccess": healthy_cluster,
+                        "publicAccessCidrs": ["10.0.0.0/8"]
+                        if healthy_cluster
+                        else ["0.0.0.0/0", "::/0"],
+                        "subnetIds": ["subnet-fixture-a", "subnet-fixture-b"],
+                        "securityGroupIds": ["sg-fixture"],
+                    },
+                    "logging": {
+                        "clusterLogging": [
+                            {
+                                "types": [
+                                    "api",
+                                    "audit",
+                                    "authenticator",
+                                    "controllerManager",
+                                    "scheduler",
+                                ]
+                                if healthy_cluster
+                                else ["api", "scheduler"],
+                                "enabled": True,
+                            }
+                        ]
+                    },
+                }
+            }
+        )
+    if len(parts) == 3 and parts[:1] == ["clusters"] and parts[2] == "node-groups":
+        cluster_name = parts[1]
+        return _json_bytes(
+            {
+                "nodegroups": (
+                    ["healthy-ng"]
+                    if cluster_name == healthy
+                    else ["skew-ng", "old-ami-ng", "degraded-ng", "custom-ng"]
+                )
+            }
+        )
+    if len(parts) == 4 and parts[:1] == ["clusters"] and parts[2] == "node-groups":
+        cluster_name, nodegroup_name = parts[1], parts[3]
+        values = {
+            "healthy-ng": {
+                "version": "1.31",
+                "releaseVersion": "1.31.9-20260701",
+                "latestReleaseVersion": "1.31.9-20260701",
+                "amiType": "AL2_X86_64",
+                "status": "ACTIVE",
+                "health": {"issues": []},
+            },
+            "skew-ng": {
+                "version": "1.28",
+                "releaseVersion": "1.28.15-20260701",
+                "latestReleaseVersion": "1.28.15-20260701",
+                "amiType": "AL2_X86_64",
+                "status": "ACTIVE",
+                "health": {"issues": []},
+            },
+            "old-ami-ng": {
+                "version": "1.30",
+                "releaseVersion": "1.30.2-20250101",
+                "latestReleaseVersion": "1.30.14-20260701",
+                "amiType": "AL2_X86_64",
+                "status": "ACTIVE",
+                "health": {"issues": []},
+            },
+            "degraded-ng": {
+                "version": "1.30",
+                "releaseVersion": "1.30.14-20260701",
+                "latestReleaseVersion": "1.30.14-20260701",
+                "amiType": "AL2_X86_64",
+                "status": "DEGRADED",
+                "health": {
+                    "issues": [
+                        {
+                            "code": "NodeCreationFailure",
+                            "message": "Fixture nodes failed health checks.",
+                            "resourceIds": ["bluearch-eks-lab-worker2"],
+                        }
+                    ]
+                },
+            },
+            "custom-ng": {
+                "version": "1.30",
+                "releaseVersion": "custom-fixture-1",
+                "amiType": "CUSTOM",
+                "status": "ACTIVE",
+                "health": {"issues": []},
+            },
+        }.get(nodegroup_name)
+        if values is None:
+            return None
+        return _json_bytes(
+            {
+                "nodegroup": {
+                    "clusterName": cluster_name,
+                    "nodegroupName": nodegroup_name,
+                    "nodegroupArn": f"arn:aws:eks:us-east-1:000000000000:nodegroup/{cluster_name}/{nodegroup_name}/fixture",
+                    "scalingConfig": {"minSize": 1, "maxSize": 3, "desiredSize": 1},
+                    **values,
+                }
+            }
+        )
+    if len(parts) == 3 and parts[:1] == ["clusters"] and parts[2] == "addons":
+        cluster_name = parts[1]
+        return _json_bytes(
+            {"addons": ["kube-proxy"] if cluster_name == healthy else ["vpc-cni", "coredns"]}
+        )
+    if len(parts) == 4 and parts[:1] == ["clusters"] and parts[2] == "addons":
+        cluster_name, addon_name = parts[1], parts[3]
+        healthy_addon = cluster_name == healthy
+        unhealthy = addon_name == "vpc-cni"
+        return _json_bytes(
+            {
+                "addon": {
+                    "clusterName": cluster_name,
+                    "addonName": addon_name,
+                    "addonArn": f"arn:aws:eks:us-east-1:000000000000:addon/{cluster_name}/{addon_name}/fixture",
+                    "addonVersion": (
+                        "v1.0.0-eksbuild.1" if healthy_addon or unhealthy else "v1.80.0-eksbuild.1"
+                    ),
+                    "status": "DEGRADED" if unhealthy else "ACTIVE",
+                    "health": {
+                        "issues": [
+                            {
+                                "code": "ConfigurationConflict",
+                                "message": "Fixture add-on pod is not Ready.",
+                                "resourceIds": ["aws-node-fixture"],
+                            }
+                        ]
+                        if unhealthy
+                        else []
+                    },
+                }
+            }
+        )
+    return None
+
+
+def _guardduty_fixture_response(normalized_target: str, request_body: bytes) -> bytes | None:
+    del request_body
+    if "listdetectors" in normalized_target:
+        return _json_bytes({"DetectorIds": ["fixture-detector"]})
+    if "getdetector" in normalized_target:
+        return _json_bytes(
+            {
+                "Status": "ENABLED",
+                "Features": [{"Name": "EKS_RUNTIME_MONITORING", "Status": "DISABLED"}],
+            }
+        )
+    return None
+
+
+def _ssm_fixture_response(request_body: bytes) -> bytes:
+    try:
+        request = json.loads(request_body or b"{}")
+    except json.JSONDecodeError:
+        request = {}
+    parameter_name = str(request.get("Name") or "")
+    releases = {
+        "/1.28/": "1.28.15-20260701",
+        "/1.30/": "1.30.14-20260701",
+        "/1.31/": "1.31.9-20260701",
+    }
+    release = next(
+        (value for marker, value in releases.items() if marker in parameter_name),
+        "1.30.14-20260701",
+    )
+    return _json_bytes(
+        {
+            "Parameter": {
+                "Name": parameter_name,
+                "Type": "String",
+                "Value": release,
+                "Version": 1,
+                "ARN": f"arn:aws:ssm:us-east-1::parameter{parameter_name}",
+                "DataType": "text",
+            }
+        }
+    )
 
 
 def _json_bytes(document: object) -> bytes:

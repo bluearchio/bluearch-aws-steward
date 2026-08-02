@@ -1,0 +1,41 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ValidateIdentity",
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadEksConfiguration",
+      "Effect": "Allow",
+      "Action": [
+        "eks:DescribeAddon",
+        "eks:DescribeAddonVersions",
+        "eks:DescribeCluster",
+        "eks:DescribeClusterVersions",
+        "eks:DescribeNodegroup",
+        "eks:ListAddons",
+        "eks:ListNodegroups"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadEksSignals",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:GetMetricData",
+        "guardduty:GetDetector",
+        "guardduty:ListDetectors"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadEksAmiMetadata",
+      "Effect": "Allow",
+      "Action": "ssm:GetParameter",
+      "Resource": "arn:aws:ssm:*::parameter/aws/service/eks/optimized-ami/*"
+    }
+  ]
+}

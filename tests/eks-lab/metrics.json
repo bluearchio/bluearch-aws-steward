@@ -1,0 +1,39 @@
+{
+  "pods": {
+    "bluearch-eks-lab/cpu-pressure-api-": {
+      "cpu_limit_percent": [82, 84, 86, 88, 90, 92]
+    },
+    "bluearch-eks-lab/memory-pressure-api-": {
+      "memory_limit_percent": [91, 92, 93, 94, 95, 96],
+      "node_memory_pressure": false
+    },
+    "bluearch-eks-lab/runtime-healthy-api-": {
+      "cpu_limit_percent": [20, 25, 30, 35, 25, 20],
+      "memory_limit_percent": [30, 35, 40, 45, 40, 35]
+    }
+  },
+  "workloads": {
+    "bluearch-eks-lab/overprovisioned-api": {
+      "lookback_days": 14,
+      "completeness_percent": 100,
+      "estimated_monthly_savings_usd": 18.4,
+      "savings_confidence": "high",
+      "containers": {
+        "app": {
+          "cpu_p95_millicores": 50,
+          "memory_p95_bytes": 67108864
+        }
+      }
+    },
+    "bluearch-eks-lab/balanced-api": {
+      "lookback_days": 14,
+      "completeness_percent": 100,
+      "containers": {
+        "app": {
+          "cpu_p95_millicores": 400,
+          "memory_p95_bytes": 402653184
+        }
+      }
+    }
+  }
+}

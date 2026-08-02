@@ -5,7 +5,14 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 ASSESSMENT_MODES = ("guided", "focused", "full_report")
-ASSESSMENT_OBJECTIVES = ("cost_optimization", "security", "reliability", "operations", "all")
+ASSESSMENT_OBJECTIVES = (
+    "cost_optimization",
+    "security",
+    "reliability",
+    "operations",
+    "performance_efficiency",
+    "all",
+)
 REPORT_PROFILES = ("executive", "technical", "remediation", "complete")
 
 

@@ -49,6 +49,8 @@ class AwsSdkProvider:
         self._session = session or self._create_session()
         self._clients: Dict[str, Any] = {}
         self._clients_lock = Lock()
+        self._operation_log: List[str] = []
+        self._operation_log_lock = Lock()
 
     def _create_session(self) -> Any:
         try:
@@ -79,8 +81,14 @@ class AwsSdkProvider:
     def capabilities(self) -> Set[str]:
         return set(READ_OPERATIONS)
 
+    def operations_executed(self) -> List[str]:
+        with self._operation_log_lock:
+            return list(self._operation_log)
+
     def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
         spec = read_operation(operation)
+        with self._operation_log_lock:
+            self._operation_log.append(operation)
         if spec.expected_missing_codes:
             response = self._call_optional(
                 spec.service,

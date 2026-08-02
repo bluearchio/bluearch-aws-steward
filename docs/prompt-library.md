@@ -183,6 +183,29 @@ Use this after an assessment reaches `completed`:
 > IAM permissions, before and after state, impact warnings, rollback guidance,
 > verification method, plan expiry, and whether apply is supported.
 
+## Investigate A Deletion Candidate
+
+Use this before creating a plan for an unattached EBS volume or unassociated
+Elastic IP returned by an assessment:
+
+> Investigate the selected deletion candidate. Revalidate it against live AWS,
+> show observed dependencies, business ownership and environment, recovery
+> evidence, blast radius, evidence coverage, capability gaps, and every human
+> confirmation still required. Do not infer safety from missing evidence, do
+> not declare the resource safe to delete, and do not apply changes.
+
+## Diagnose An RDS Or ECS Finding
+
+Use this after selecting an RDS performance/exposure finding or an ECS health,
+platform, or task-definition finding:
+
+> Investigate the selected finding against live AWS. Separate observed facts
+> from hypotheses, show dependency and ownership context, evidence coverage,
+> capability gaps, business impact, and the smallest planning-only AWS or IaC
+> change candidate. Do not claim a root cause from CPU or service counters
+> alone, do not return ECS environment values or raw sensitive failure details,
+> and do not apply changes.
+
 ## Apply And Verify
 
 Use this only after reviewing a server-issued plan:
@@ -215,5 +238,5 @@ tokens into the payload.
 Avoid prompts such as `scan everything` or `fix my AWS`. They omit the account,
 region, objective, output size, and write policy. Also distinguish between:
 
-- Complete catalog search: knowledge across all 631 rules.
+- Complete catalog search: knowledge across all 649 rules.
 - Live AWS assessment: pass/fail evaluation for the currently automated rules.

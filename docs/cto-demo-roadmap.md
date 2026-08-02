@@ -29,9 +29,9 @@ The current implementation provides:
 - Assessment-based explain, plan, apply, and verify calls.
 - AWS SDK as the bundled default provider.
 - Short-lived, digest-bound plans plus explicit `allow_write: true` protection for supported writes.
-- A complete 631-rule knowledge registry with explicit native, manual,
+- A complete 649-rule knowledge registry with explicit native, manual,
   metadata-required, signal-required, and specification-required modes.
-- One hundred executable rules across 16 runtime scopes.
+- One hundred twenty executable rules across 17 runtime scopes.
 - Partial results, cancellation, service failure isolation, and assessment-local metrics.
 - Guarded remediation for eight narrowly scoped controls.
 - Live Security Hub, Compute Optimizer, and Cost Optimization Hub adapters plus

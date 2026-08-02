@@ -1321,6 +1321,541 @@
       "access_tier": "free"
     },
     {
+      "id": "61cedb38-f6a3-492b-b9a9-cdff2408305f",
+      "short_id": "eks-control-plane-logging-incomplete",
+      "service": "eks",
+      "scenario": "EKS control-plane logging omits one or more supported log types",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "eks_control_plane_logging_incomplete",
+      "remediation": {
+        "summary": "Enable missing log types with reviewed retention and cost settings.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {
+        "required_log_types": [
+          "api",
+          "audit",
+          "authenticator",
+          "controllerManager",
+          "scheduler"
+        ]
+      },
+      "catalog_service": "eks",
+      "capabilities": [
+        "eks.list_clusters",
+        "eks.describe_cluster"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "38c186b1-36f2-4133-a6ef-9c1628f5c6f6",
+      "short_id": "eks-guardduty-runtime-monitoring-disabled",
+      "service": "eks",
+      "scenario": "GuardDuty EKS Runtime Monitoring is not enabled",
+      "risk_detail": "security",
+      "severity": "medium",
+      "detector": "eks_guardduty_runtime_monitoring_disabled",
+      "remediation": {
+        "summary": "Enable GuardDuty EKS Runtime Monitoring through a reviewed regional plan.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "eks",
+      "capabilities": [
+        "guardduty.list_detectors",
+        "guardduty.get_detector"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "1a7530de-a49e-4c19-b5ce-285e5ddc24c2",
+      "short_id": "eks-managed-addon-unhealthy",
+      "service": "eks",
+      "scenario": "EKS managed add-on reports a degraded or failed status",
+      "risk_detail": "operations, reliability",
+      "severity": "high",
+      "detector": "eks_managed_addon_unhealthy",
+      "remediation": {
+        "summary": "Correlate add-on health with kube-system pods and events before changing it.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "eks",
+      "capabilities": [
+        "eks.list_clusters",
+        "eks.describe_cluster",
+        "eks.list_addons",
+        "eks.describe_addon"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "operations",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "43b72440-6061-4b3d-a245-587b5cf38f6e",
+      "short_id": "eks-managed-addon-update-available",
+      "service": "eks",
+      "scenario": "A compatible default version update is available for an EKS managed add-on",
+      "risk_detail": "security, operations, reliability",
+      "severity": "medium",
+      "detector": "eks_managed_addon_update_available",
+      "remediation": {
+        "summary": "Review compatibility, conflicts, workload health, and rollback before updating.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "eks",
+      "capabilities": [
+        "eks.list_clusters",
+        "eks.describe_cluster",
+        "eks.list_addons",
+        "eks.describe_addon",
+        "eks.describe_addon_versions"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "c6dea539-c4af-4428-9e81-2e34f7265acb",
+      "short_id": "eks-nodegroup-ami-outdated",
+      "service": "eks",
+      "scenario": "EKS managed node group uses an outdated EKS-optimized AMI release",
+      "risk_detail": "security, operations, reliability",
+      "severity": "medium",
+      "detector": "eks_nodegroup_ami_outdated",
+      "remediation": {
+        "summary": "Review launch templates, PDBs, and capacity before updating the AMI.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "eks",
+      "capabilities": [
+        "eks.list_clusters",
+        "eks.describe_cluster",
+        "eks.list_nodegroups",
+        "eks.describe_nodegroup",
+        "ssm.get_parameter"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "48ed2c60-b006-4f24-9e09-e7e3b6aa03b1",
+      "short_id": "eks-nodegroup-health-degraded",
+      "service": "eks",
+      "scenario": "EKS managed node group reports health issues",
+      "risk_detail": "operations, reliability",
+      "severity": "high",
+      "detector": "eks_nodegroup_health_degraded",
+      "remediation": {
+        "summary": "Correlate AWS health issues with nodes, pods, events, and capacity.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "eks",
+      "capabilities": [
+        "eks.list_clusters",
+        "eks.describe_cluster",
+        "eks.list_nodegroups",
+        "eks.describe_nodegroup"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "operations",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "17002d8c-9748-4ae1-8d70-0d747a78b64e",
+      "short_id": "eks-nodegroup-version-skew",
+      "service": "eks",
+      "scenario": "EKS managed node group Kubernetes version is behind its cluster version",
+      "risk_detail": "operations, reliability",
+      "severity": "medium",
+      "detector": "eks_nodegroup_version_skew",
+      "remediation": {
+        "summary": "Review disruption budgets and spare capacity before upgrading the node group.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "eks",
+      "capabilities": [
+        "eks.list_clusters",
+        "eks.describe_cluster",
+        "eks.list_nodegroups",
+        "eks.describe_nodegroup"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "operations",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "f5227b51-735c-4d67-897f-a905c3cab5dd",
+      "short_id": "eks-private-endpoint-disabled",
+      "service": "eks",
+      "scenario": "EKS cluster private API endpoint is disabled while public access is enabled",
+      "risk_detail": "security, operations",
+      "severity": "medium",
+      "detector": "eks_private_endpoint_disabled",
+      "remediation": {
+        "summary": "Validate a reachable private administration path before changing endpoints.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "eks",
+      "capabilities": [
+        "eks.list_clusters",
+        "eks.describe_cluster"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "66fe80cd-33a4-4176-8718-13f64147a423",
+      "short_id": "eks-public-endpoint-open",
+      "service": "eks",
+      "scenario": "EKS cluster API endpoint is publicly reachable from unrestricted CIDRs",
+      "risk_detail": "security, operations",
+      "severity": "high",
+      "detector": "eks_public_endpoint_open",
+      "remediation": {
+        "summary": "Restrict public endpoint CIDRs or use a reviewed private access path.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "eks",
+      "capabilities": [
+        "eks.list_clusters",
+        "eks.describe_cluster"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "414ff551-cee0-4aa9-9fe5-68dec58a90a1",
+      "short_id": "eks-version-support-risk",
+      "service": "eks",
+      "scenario": "EKS Kubernetes version is in extended support or approaching end of support",
+      "risk_detail": "security, operations, reliability",
+      "severity": "high",
+      "detector": "eks_version_support_risk",
+      "remediation": {
+        "summary": "Validate workloads, add-ons, nodes, and rollback capacity before upgrading.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "support_warning_days": 90,
+        "critical_warning_days": 30
+      },
+      "catalog_service": "eks",
+      "capabilities": [
+        "eks.list_clusters",
+        "eks.describe_cluster",
+        "eks.describe_cluster_versions"
+      ],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security",
+        "operations",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "5fc3d4a9-96ef-4bba-82e9-bccabe531b34",
+      "short_id": "eks-workload-overprovisioned",
+      "service": "eks",
+      "scenario": "Kubernetes workload requests materially exceed observed P95 usage",
+      "risk_detail": "cost, performance",
+      "severity": "low",
+      "detector": "eks_workload_overprovisioned",
+      "remediation": {
+        "summary": "Generate a reviewed request change only after validating seasonality and autoscaling.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "lookback_days": 14,
+        "minimum_completeness_percent": 70.0,
+        "safety_margin": 1.4
+      },
+      "catalog_service": "eks",
+      "capabilities": [
+        "cloudwatch.get_metric_data"
+      ],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "cost_optimization",
+        "performance_efficiency",
+        "sustainability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "ee15e84f-3bfd-43fe-8751-1c4065b3c7dd",
+      "short_id": "k8s-pod-cpu-limit-pressure",
+      "service": "eks",
+      "scenario": "Kubernetes pod CPU use remains close to its configured limit",
+      "risk_detail": "performance, reliability",
+      "severity": "medium",
+      "detector": "k8s_pod_cpu_limit_pressure",
+      "remediation": {
+        "summary": "Review HPA, code behavior, and throttling-specific evidence before changing CPU.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "threshold_percent": 80.0,
+        "minimum_breach_periods": 5,
+        "periods": 6
+      },
+      "catalog_service": "kubernetes",
+      "capabilities": [],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "performance_efficiency",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "19711ad3-7aae-46e2-8d1d-936474ad1ba2",
+      "short_id": "k8s-pod-memory-pressure",
+      "service": "eks",
+      "scenario": "Kubernetes pod has OOM termination or sustained memory pressure",
+      "risk_detail": "performance, reliability",
+      "severity": "high",
+      "detector": "k8s_pod_memory_pressure",
+      "remediation": {
+        "summary": "Correlate limits, working set, OOM termination, restarts, and node pressure.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "threshold_percent": 90.0,
+        "minimum_breach_periods": 5,
+        "periods": 6
+      },
+      "catalog_service": "kubernetes",
+      "capabilities": [],
+      "evaluation_kind": "signal",
+      "objectives": [
+        "performance_efficiency",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "f576861a-fe3d-4ce9-a1ba-2bc088d86d64",
+      "short_id": "k8s-pod-restart-loop",
+      "service": "eks",
+      "scenario": "Kubernetes pod is repeatedly restarting or waiting in CrashLoopBackOff",
+      "risk_detail": "reliability, operations",
+      "severity": "high",
+      "detector": "k8s_pod_restart_loop",
+      "remediation": {
+        "summary": "Correlate termination state, probes, resources, rollout, and events.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "minimum_recent_restarts": 5
+      },
+      "catalog_service": "kubernetes",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "reliability",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "8e69205c-40e6-4f9f-80ba-3981a20913c4",
+      "short_id": "k8s-pod-unschedulable",
+      "service": "eks",
+      "scenario": "Kubernetes pod remains unschedulable",
+      "risk_detail": "reliability, operations",
+      "severity": "high",
+      "detector": "k8s_pod_unschedulable",
+      "remediation": {
+        "summary": "Explain the exact scheduler constraint before proposing a change.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {
+        "minimum_unschedulable_minutes": 5
+      },
+      "catalog_service": "kubernetes",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "reliability",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "45189c42-86bf-4a4f-a7fe-947e4c1ef8d0",
+      "short_id": "k8s-workload-dangerous-privileges",
+      "service": "eks",
+      "scenario": "Kubernetes workload requests dangerous host or container privileges",
+      "risk_detail": "security",
+      "severity": "high",
+      "detector": "k8s_workload_dangerous_privileges",
+      "remediation": {
+        "summary": "Remove unnecessary privileges in source manifests and validate the rollout.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "kubernetes",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "security"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "a9d36d97-5c67-49bd-918f-994419830cab",
+      "short_id": "k8s-workload-disruption-unprotected",
+      "service": "eks",
+      "scenario": "Replicated service-exposed Kubernetes workload has no PodDisruptionBudget",
+      "risk_detail": "reliability, operations",
+      "severity": "medium",
+      "detector": "k8s_workload_disruption_unprotected",
+      "remediation": {
+        "summary": "Add a reviewed PDB that preserves availability without blocking maintenance.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "kubernetes",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "reliability",
+        "operations"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "82ee867e-d1d8-4f7d-90b6-f24dcd20acef",
+      "short_id": "k8s-workload-missing-memory-limit",
+      "service": "eks",
+      "scenario": "Kubernetes workload containers omit memory limits",
+      "risk_detail": "performance, reliability",
+      "severity": "medium",
+      "detector": "k8s_workload_missing_memory_limit",
+      "remediation": {
+        "summary": "Measure peak memory and add reviewed limits.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "kubernetes",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "performance_efficiency",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "5452b6e0-43df-44e0-a34d-362e9c2ac1d9",
+      "short_id": "k8s-workload-missing-probes",
+      "service": "eks",
+      "scenario": "Kubernetes workload containers omit readiness or liveness probes",
+      "risk_detail": "operations, reliability",
+      "severity": "medium",
+      "detector": "k8s_workload_missing_probes",
+      "remediation": {
+        "summary": "Define application-specific probes and validate them in a staged rollout.",
+        "safety_level": "high_risk",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "kubernetes",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "operations",
+        "reliability"
+      ],
+      "access_tier": "free"
+    },
+    {
+      "id": "1d2e851b-4f16-40bc-8a1b-89dd07c09a1e",
+      "short_id": "k8s-workload-missing-resource-requests",
+      "service": "eks",
+      "scenario": "Kubernetes workload containers omit CPU or memory requests",
+      "risk_detail": "performance, reliability, cost",
+      "severity": "medium",
+      "detector": "k8s_workload_missing_resource_requests",
+      "remediation": {
+        "summary": "Measure representative usage before adding reviewed requests.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "kubernetes",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [
+        "performance_efficiency",
+        "reliability",
+        "cost_optimization"
+      ],
+      "access_tier": "free"
+    },
+    {
       "id": "8c0a3d78-a5e3-4ac1-a1ca-f25306b46143",
       "short_id": "iam-access-key-older-than-90-days",
       "service": "iam",
@@ -2686,8 +3221,10 @@
       "ec2",
       "ecs",
       "efs",
+      "eks",
       "iam",
       "kms",
+      "kubernetes",
       "lambda",
       "networking",
       "rds",
@@ -2696,7 +3233,7 @@
       "sns",
       "sqs"
     ],
-    "imported_rules": 100,
+    "imported_rules": 120,
     "skipped_unsupported_rules": {
       "alb-elb": 10,
       "api-gateway": 1,
@@ -2707,8 +3244,10 @@
       "ec2": 39,
       "ecs": 2,
       "efs": 3,
+      "eks": 0,
       "iam": 6,
       "kms": 1,
+      "kubernetes": 0,
       "lambda": 10,
       "networking": 11,
       "rds": 12,

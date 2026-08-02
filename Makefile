@@ -10,7 +10,7 @@ EMULATOR_VERIFY_OUTPUT ?= $(EMULATOR_ARTIFACT_DIR)/verify.s3.json
 EMULATOR_NATIVE_SDK_OUTPUT ?= $(EMULATOR_ARTIFACT_DIR)/scan.native.sdk.json
 EMULATOR_NATIVE_CLI_OUTPUT ?= $(EMULATOR_ARTIFACT_DIR)/scan.native.cli.json
 EMULATOR_RULE_FILTER ?= s3-public-bucket,s3-no-default-encryption,s3-no-lifecycle,s3-versioning-disabled
-EMULATOR_NATIVE_RULE_FILTER ?= $(shell $(PYTHON) -c 'import json; print(",".join(sorted(rule["short_id"] for rule in json.load(open("bluearch_aws_steward/catalog/rules.json"))["rules"])))')
+EMULATOR_NATIVE_RULE_FILTER ?= $(shell $(PYTHON) -c 'import json; print(",".join(sorted(rule["short_id"] for rule in json.load(open("bluearch_aws_steward/catalog/rules.json"))["rules"] if rule["service"] != "eks")))')
 EMULATOR_FIXTURE_ENDPOINT_TOKEN ?= __FIXTURE_ENDPOINT__
 CATALOG_SOURCE ?= ../aws-misconfig-db
 AWS_PROFILE ?= default
@@ -19,6 +19,11 @@ PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; else e
 PIP_AUDIT_CACHE_DIR ?= /tmp/bluearch-steward-pip-audit
 PACKAGE_VERSION ?= $(shell $(PYTHON) -c 'from bluearch_aws_steward import __version__; print(__version__)')
 UV ?= uv
+EKS_LAB_ARTIFACT_DIR ?= tests/eks-lab/.artifacts
+EKS_AWS_LAB_DIR ?= tests/aws-eks-live
+EKS_AWS_LAB_ARTIFACT_DIR ?= $(EKS_AWS_LAB_DIR)/.artifacts
+TERRAFORM ?=
+KIND_NODE_IMAGE ?= kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
 
 .PHONY: dev-sync
 dev-sync:
@@ -76,6 +81,7 @@ test: test-mcp
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m bluearch_aws_steward rules search encryption --service efs --output json >/dev/null
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m bluearch_aws_steward rules search task --service ecs --output json >/dev/null
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m bluearch_aws_steward rules search listener --service alb --output json >/dev/null
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m bluearch_aws_steward rules search nodegroup --service eks --output json >/dev/null
 
 .PHONY: catalog-check
 catalog-check:
@@ -192,6 +198,76 @@ localstack-dashboard:
 	$(MAKE) emulator-dashboard EMULATOR_SERVICE=localstack EMULATOR_COMPOSE_PROFILE="--profile localstack-compat"
 localstack-logs:
 	$(MAKE) emulator-logs EMULATOR_SERVICE=localstack EMULATOR_COMPOSE_PROFILE="--profile localstack-compat"
+
+.PHONY: eks-lab-up eks-lab-reset eks-lab-status eks-lab-down
+eks-lab-up:
+	KIND_NODE_IMAGE=$(KIND_NODE_IMAGE) tests/eks-lab/scripts/up.sh
+
+eks-lab-reset:
+	tests/eks-lab/scripts/reset.sh
+
+eks-lab-status:
+	tests/eks-lab/scripts/status.sh
+
+eks-lab-down:
+	tests/eks-lab/scripts/down.sh
+
+.PHONY: eks-lab-phase-0 eks-lab-phase-1 eks-lab-phase-2 eks-lab-phase-3 eks-lab-phase-4
+eks-lab-phase-0:
+	$(PYTHON) tests/eks-lab/scripts/phase.py --phase 0 --endpoint-url $(EMULATOR_ENDPOINT) --region $(EMULATOR_REGION) --artifact-dir $(EKS_LAB_ARTIFACT_DIR)
+
+eks-lab-phase-1:
+	$(PYTHON) tests/eks-lab/scripts/phase.py --phase 1 --endpoint-url $(EMULATOR_ENDPOINT) --region $(EMULATOR_REGION) --artifact-dir $(EKS_LAB_ARTIFACT_DIR)
+
+eks-lab-phase-2:
+	$(PYTHON) tests/eks-lab/scripts/phase.py --phase 2 --endpoint-url $(EMULATOR_ENDPOINT) --region $(EMULATOR_REGION) --artifact-dir $(EKS_LAB_ARTIFACT_DIR)
+
+eks-lab-phase-3:
+	$(PYTHON) tests/eks-lab/scripts/phase.py --phase 3 --endpoint-url $(EMULATOR_ENDPOINT) --region $(EMULATOR_REGION) --artifact-dir $(EKS_LAB_ARTIFACT_DIR)
+
+eks-lab-phase-4:
+	$(PYTHON) tests/eks-lab/scripts/phase.py --phase 4 --endpoint-url $(EMULATOR_ENDPOINT) --region $(EMULATOR_REGION) --artifact-dir $(EKS_LAB_ARTIFACT_DIR)
+
+.PHONY: eks-lab-full eks-lab-remediation
+eks-lab-full: eks-lab-reset
+	$(PYTHON) tests/eks-lab/scripts/full.py --endpoint-url $(EMULATOR_ENDPOINT) --region $(EMULATOR_REGION) --artifact-dir $(EKS_LAB_ARTIFACT_DIR)
+
+eks-lab-remediation:
+	$(PYTHON) tests/eks-lab/scripts/remediation.py --endpoint-url $(EMULATOR_ENDPOINT) --region $(EMULATOR_REGION) --artifact-dir $(EKS_LAB_ARTIFACT_DIR)
+
+.PHONY: eks-aws-lab-preflight eks-aws-lab-plan eks-aws-lab-up eks-aws-lab-seed
+eks-aws-lab-preflight:
+	$(PYTHON) $(EKS_AWS_LAB_DIR)/scripts/preflight.py --artifact-dir $(EKS_AWS_LAB_ARTIFACT_DIR)
+
+eks-aws-lab-plan:
+	EKS_AWS_LAB_ARTIFACT_DIR=$(EKS_AWS_LAB_ARTIFACT_DIR) TERRAFORM=$(TERRAFORM) $(EKS_AWS_LAB_DIR)/scripts/plan.sh
+
+eks-aws-lab-up:
+	EKS_AWS_LAB_ARTIFACT_DIR=$(EKS_AWS_LAB_ARTIFACT_DIR) TERRAFORM=$(TERRAFORM) $(EKS_AWS_LAB_DIR)/scripts/up.sh
+
+eks-aws-lab-seed:
+	EKS_AWS_LAB_ARTIFACT_DIR=$(EKS_AWS_LAB_ARTIFACT_DIR) $(EKS_AWS_LAB_DIR)/scripts/seed.sh
+
+.PHONY: eks-aws-lab-validate-connection eks-aws-lab-rules eks-aws-lab-investigate
+eks-aws-lab-validate-connection:
+	$(PYTHON) $(EKS_AWS_LAB_DIR)/scripts/e2e_mcp.py --stage connection --artifact-dir $(EKS_AWS_LAB_ARTIFACT_DIR)
+
+eks-aws-lab-rules:
+	$(PYTHON) $(EKS_AWS_LAB_DIR)/scripts/e2e_mcp.py --stage rules --artifact-dir $(EKS_AWS_LAB_ARTIFACT_DIR)
+
+eks-aws-lab-investigate:
+	$(PYTHON) $(EKS_AWS_LAB_DIR)/scripts/e2e_mcp.py --stage investigate --artifact-dir $(EKS_AWS_LAB_ARTIFACT_DIR)
+
+
+.PHONY: eks-aws-lab-full eks-aws-lab-down eks-aws-lab-verify-clean
+eks-aws-lab-full:
+	EKS_AWS_LAB_ARTIFACT_DIR=$(EKS_AWS_LAB_ARTIFACT_DIR) TERRAFORM=$(TERRAFORM) $(EKS_AWS_LAB_DIR)/scripts/full.sh
+
+eks-aws-lab-down:
+	EKS_AWS_LAB_ARTIFACT_DIR=$(EKS_AWS_LAB_ARTIFACT_DIR) TERRAFORM=$(TERRAFORM) $(EKS_AWS_LAB_DIR)/scripts/down.sh
+
+eks-aws-lab-verify-clean:
+	$(PYTHON) $(EKS_AWS_LAB_DIR)/scripts/verify_clean.py --artifact-dir $(EKS_AWS_LAB_ARTIFACT_DIR)
 
 .PHONY: aws-live-s3
 aws-live-s3:

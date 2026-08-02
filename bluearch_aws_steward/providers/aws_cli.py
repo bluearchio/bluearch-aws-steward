@@ -43,12 +43,17 @@ class AwsCliProvider(AwsCli):
                 command_timeout_sec=config.command_timeout_sec,
             )
         )
+        self._operation_log: List[str] = []
 
     def capabilities(self) -> Set[str]:
         return set(READ_OPERATIONS)
 
+    def operations_executed(self) -> List[str]:
+        return list(self._operation_log)
+
     def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
         spec = read_operation(operation)
+        self._operation_log.append(operation)
         arguments = list(spec.cli_command)
         for key, value in parameters.items():
             if value is None:

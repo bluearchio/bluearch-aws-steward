@@ -43,7 +43,7 @@ class McpProcess:
                 "params": {
                     "protocolVersion": "2025-06-18",
                     "capabilities": {},
-                    "clientInfo": {"name": "bluearch-aws-live-e2e", "version": "0.7.0b4"},
+                    "clientInfo": {"name": "bluearch-aws-live-e2e", "version": "0.8.0b1"},
                 },
             }
         )["result"]
@@ -110,10 +110,25 @@ def main() -> int:
     parser.add_argument("--timeout-seconds", type=int, default=900)
     parser.add_argument("--max-returned-resources", type=int, default=5)
     parser.add_argument("--max-returned-findings", type=int, default=5)
+    parser.add_argument(
+        "--rule-filter",
+        help="Optional comma-separated native rule IDs for a focused live validation.",
+    )
+    parser.add_argument(
+        "--investigate-first-deletion-candidate",
+        action="store_true",
+        help=(
+            "After completion, investigate the first matched EBS or Elastic IP deletion "
+            "candidate through the same MCP process."
+        ),
+    )
     arguments = parser.parse_args()
     signal_sources = [item.strip() for item in arguments.signal_sources.split(",") if item.strip()]
     if not signal_sources:
         parser.error("--signal-sources must include at least one source")
+    rule_filter = [
+        item.strip() for item in (arguments.rule_filter or "").split(",") if item.strip()
+    ]
     external_findings = []
     if arguments.prowler_json_file:
         prowler_path = Path(arguments.prowler_json_file).expanduser().resolve()
@@ -129,6 +144,7 @@ def main() -> int:
         initialized = mcp.initialize()
         _expect(initialized["serverInfo"]["name"] == "bluearch-aws-steward", initialized)
 
+        assessment_started_at = time.monotonic()
         started = mcp.call(
             "bluearch_assess",
             {
@@ -139,6 +155,7 @@ def main() -> int:
                 "objective": "all",
                 "signal_sources": signal_sources,
                 "external_findings": external_findings,
+                "rule_filter": ",".join(rule_filter),
                 "max_returned_resources": arguments.max_returned_resources,
                 "max_returned_findings": arguments.max_returned_findings,
                 "prompt": (
@@ -199,6 +216,75 @@ def main() -> int:
         final = response["result"]
         summary = final["summary"]
         _expect(final["mcp"]["write_actions_applied"] is False, final["mcp"])
+        assessment_elapsed_seconds = round(time.monotonic() - assessment_started_at, 3)
+
+        investigation_summary: Optional[Dict[str, Any]] = None
+        if arguments.investigate_first_deletion_candidate:
+            candidate_rules = [
+                "ec2-unattached-ebs-volume",
+                "ec2-unassociated-elastic-ip",
+                "ecs-inactive-task-definition",
+                "efs-inactive-unmounted",
+                "lambda-unused-function",
+                "rds-idle-instance",
+            ]
+            queried = mcp.call(
+                "bluearch_query_results",
+                {
+                    "assessment_id": assessment_id,
+                    "filters": {"rules": candidate_rules},
+                    "page_size": 10,
+                },
+            )
+            candidates = queried.get("findings") or []
+            _expect(bool(candidates), queried)
+            selected = candidates[0]
+            investigation_started_at = time.monotonic()
+            investigation = mcp.call(
+                "bluearch_investigate_resource",
+                {
+                    "assessment_id": assessment_id,
+                    "finding_id": selected["opportunity_id"],
+                },
+            )
+            investigation_elapsed_seconds = round(time.monotonic() - investigation_started_at, 3)
+            _expect(investigation.get("read_only") is True, investigation)
+            _expect(investigation.get("write_actions_applied") is False, investigation)
+            _expect(
+                (investigation.get("deletion_readiness") or {}).get("safe_to_delete") is False,
+                investigation,
+            )
+            investigation_summary = {
+                "status": (investigation.get("deletion_readiness") or {}).get("status"),
+                "rule": investigation.get("rule"),
+                "live_revalidated": investigation.get("live_revalidated"),
+                "finding_reproduced": investigation.get("finding_reproduced"),
+                "aws_reads_performed": investigation.get("aws_reads_performed"),
+                "observed_relationships": (investigation.get("dependency_summary") or {}).get(
+                    "observed_relationships"
+                ),
+                "cross_service_graph": (investigation.get("dependency_summary") or {}).get(
+                    "cross_service_graph"
+                ),
+                "evidence_coverage": investigation.get("evidence_coverage"),
+                "confidence": investigation.get("confidence"),
+                "business_impact_category": (investigation.get("business_impact") or {}).get(
+                    "category"
+                ),
+                "planned_aws_api": (
+                    (investigation.get("change_plan_preview") or {}).get("target_operation") or {}
+                ).get("aws_api"),
+                "steward_can_execute": (investigation.get("change_plan_preview") or {}).get(
+                    "executable_by_steward"
+                ),
+                "verification_checks": len(investigation.get("post_change_verification") or []),
+                "unresolved_unknowns": len(
+                    (investigation.get("deletion_readiness") or {}).get("unresolved_unknowns") or []
+                ),
+                "safe_to_delete": False,
+                "write_actions_applied": False,
+                "elapsed_seconds": investigation_elapsed_seconds,
+            }
 
         print(
             json.dumps(
@@ -206,9 +292,11 @@ def main() -> int:
                     "profile": arguments.profile,
                     "region": arguments.region,
                     "service": arguments.service,
+                    "rule_filter": rule_filter,
                     "prowler_file_imported": bool(arguments.prowler_json_file),
                     "sources_requested": summary.get("sources_requested") or signal_sources,
                     "status": "completed",
+                    "assessment_elapsed_seconds": assessment_elapsed_seconds,
                     "partial_results_observed": partial is not None,
                     "resources_scanned": summary.get("resources_scanned", 0),
                     "findings": summary.get("total_findings_considered", 0),
@@ -238,6 +326,7 @@ def main() -> int:
                         for item in (final.get("capability_errors") or [])
                     ],
                     "write_actions_applied": False,
+                    "deletion_investigation": investigation_summary,
                     "account_identifiers_printed": False,
                 },
                 indent=2,

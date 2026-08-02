@@ -375,6 +375,8 @@ class AwsSdkProviderTests(unittest.TestCase):
         functions = provider.list_lambda_functions()
         self.assertEqual(functions[0]["name"], "demo-function")
         self.assertEqual(functions[0]["tracing_mode"], "Active")
+        self.assertIn("sts.get_caller_identity", provider.operations_executed())
+        self.assertIn("lambda.list_functions", provider.operations_executed())
         self.assertEqual(
             session.client_requests,
             [
