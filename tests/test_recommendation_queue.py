@@ -157,5 +157,37 @@ class RecommendationQueueTests(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 5.0)
 
 
+class ContextualRiskPriorityTests(unittest.TestCase):
+    def test_root_credential_outranks_a_high_severity_finding(self) -> None:
+        from bluearch_aws_steward.recommendation_queue import priority_score
+
+        root_key = priority_score({"rule": "iam-root-access-key-present", "severity": "medium"})
+        encryption = priority_score({"rule": "sns-topic-encryption-disabled", "severity": "high"})
+        self.assertGreater(root_key["score"], encryption["score"])
+
+    def test_components_expose_contextual_risk(self) -> None:
+        from bluearch_aws_steward.recommendation_queue import priority_score
+
+        scored = priority_score({"rule": "iam-root-access-key-present", "severity": "medium"})
+        self.assertEqual(scored["components"]["contextual_risk"], 40.0)
+        self.assertEqual([factor["id"] for factor in scored["risk_factors"]], ["root_credential"])
+
+    def test_unremarkable_finding_has_zero_contextual_risk(self) -> None:
+        from bluearch_aws_steward.recommendation_queue import priority_score
+
+        scored = priority_score({"rule": "s3-no-lifecycle", "severity": "low"})
+        self.assertEqual(scored["components"]["contextual_risk"], 0.0)
+        self.assertEqual(scored["risk_factors"], [])
+
+    def test_scoring_is_idempotent(self) -> None:
+        from bluearch_aws_steward.recommendation_queue import priority_score
+
+        finding = {"rule": "iam-root-access-key-present", "severity": "medium"}
+        first = priority_score(finding)
+        finding["priority"] = first
+        second = priority_score(finding)
+        self.assertEqual(first, second)
+
+
 if __name__ == "__main__":
     unittest.main()
