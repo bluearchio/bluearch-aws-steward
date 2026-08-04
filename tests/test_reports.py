@@ -256,6 +256,33 @@ class ReportProfileTests(unittest.TestCase):
         self.assertEqual(scores, sorted(scores, reverse=True))
         self.assertEqual(model["grouped_solutions"][0]["rule"], "rule-039")
 
+    def test_markdown_shows_the_grouped_rollup(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model, render_report
+
+        model = build_report_model(self._result(), report_profile="executive")
+        rendered = render_report(model, "markdown")
+        self.assertIn("Grouped Solutions", rendered)
+        self.assertIn("rule-039", rendered)
+
+    def test_html_shows_the_grouped_rollup(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model, render_report
+
+        model = build_report_model(self._result(), report_profile="executive")
+        rendered = render_report(model, "html")
+        self.assertIn("Grouped Solutions", rendered)
+
+    def test_executive_pdf_is_far_smaller_than_technical(self) -> None:
+        from bluearch_aws_steward.pdf_report import render_pdf_report
+        from bluearch_aws_steward.reports import build_report_model
+
+        executive = render_pdf_report(
+            build_report_model(self._result(), report_profile="executive")
+        )
+        technical = render_pdf_report(
+            build_report_model(self._result(), report_profile="technical")
+        )
+        self.assertLess(len(executive), len(technical))
+
 
 if __name__ == "__main__":
     unittest.main()

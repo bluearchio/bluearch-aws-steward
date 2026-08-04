@@ -93,6 +93,7 @@ def render_pdf_report(model: JSON) -> bytes:
         story.extend(_contextual_review(model, styles))
     story.extend(_risk_overview(summary, styles))
     story.extend(_coverage(summary, styles))
+    story.extend(_grouped_summary(model, styles))
     if report_profile == "executive":
         executive_model = {**model, "findings": list(model.get("findings") or [])[:25]}
         story.extend(_findings_summary(executive_model, styles))
@@ -568,6 +569,25 @@ def _coverage(summary: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
         )
     )
     return [PageBreak(), Paragraph("Detection coverage", styles["heading"]), table]
+
+
+def _grouped_summary(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
+    groups = model.get("grouped_solutions") or []
+    if not groups:
+        return []
+    story: List[Any] = [Paragraph("Grouped Solutions", styles["heading"])]
+    for group in groups:
+        resources = group.get("resources") or group.get("solutions") or 0
+        story.append(
+            Paragraph(
+                _safe(
+                    f"{group.get('rule')} — {resources} resource(s), "
+                    f"priority {group.get('priority_score', 0)}"
+                ),
+                styles["small"],
+            )
+        )
+    return story
 
 
 def _findings_summary(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:

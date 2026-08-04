@@ -323,6 +323,7 @@ def _render_markdown(model: JSON) -> str:
     lines.extend(f"- **{key.title()}**: {value}" for key, value in summary["by_severity"].items())
     if model.get("assessment_mode") == "architectural_review":
         lines.extend(_contextual_markdown(model))
+    lines.extend(_grouped_markdown(model))
     lines.extend(["", "## Findings", ""])
     if not model["findings"]:
         lines.append("No resources matched the evaluated rules.")
@@ -443,6 +444,23 @@ def _contextual_markdown(model: JSON) -> List[str]:
     return lines
 
 
+def _grouped_markdown(model: JSON) -> List[str]:
+    groups = model.get("grouped_solutions") or []
+    if not groups:
+        return []
+    lines = ["", "## Grouped Solutions", ""]
+    for group in groups:
+        resources = group.get("resources") or group.get("solutions") or 0
+        lines.append(
+            f"- `{group.get('rule')}` — {resources} resource(s), "
+            f"priority {group.get('priority_score', 0)}"
+        )
+        fix = group.get("recommended_fix")
+        if fix:
+            lines.append(f"  {fix}")
+    return lines
+
+
 def _render_html(model: JSON) -> str:
     summary = model["summary"]
     rows = []
@@ -471,14 +489,34 @@ def _render_html(model: JSON) -> str:
         for key, value in summary["by_severity"].items()
     )
     contextual_html = _contextual_html(model)
+    grouped_html = _grouped_html(model)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>BlueArch AWS Steward Assessment</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#172033}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #d8dee9;padding:.55rem;text-align:left}}th{{background:#edf2f7}}.summary{{display:flex;gap:2rem;flex-wrap:wrap}}.metric{{font-size:1.4rem}}.note{{color:#536174}}</style></head>
 <body><h1>BlueArch AWS Steward Assessment</h1><p class="note">Point-in-time, read-only report generated at {html.escape(str(model.get("generated_at") or "unknown"))}. Region: {html.escape(str(model.get("region") or "unknown"))}.</p>
 <section class="summary"><div class="metric">Findings <strong>{summary["findings"]}</strong></div><div class="metric">Resources <strong>{summary["resources"]}</strong></div><div class="metric">Rules <strong>{summary["rules_evaluated"]}</strong></div><div class="metric">Estimated monthly savings <strong>USD {summary["estimated_monthly_savings_usd"]:.2f}</strong></div></section>
-{contextual_html}<h2>Severity</h2><ul>{severity}</ul><h2>Findings</h2>
+{contextual_html}{grouped_html}<h2>Severity</h2><ul>{severity}</ul><h2>Findings</h2>
 <table><thead><tr><th>Severity</th><th>Service</th><th>Rule</th><th>Resource</th><th>Sources / freshness</th><th>Priority</th><th>Risk</th><th>Evidence</th><th>Savings / confidence</th></tr></thead><tbody>{"".join(rows) or '<tr><td colspan="9">No matched resources.</td></tr>'}</tbody></table>
 <h2>Limitations</h2><ul>{"".join(f"<li>{html.escape(_limitation_text(note))}</li>" for note in model["limitations"])}</ul></body></html>"""
+
+
+def _grouped_html(model: JSON) -> str:
+    groups = model.get("grouped_solutions") or []
+    if not groups:
+        return ""
+    rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(str(group.get('rule')))}</td>"
+        f"<td>{html.escape(str(group.get('resources') or group.get('solutions') or 0))}</td>"
+        f"<td>{html.escape(str(group.get('priority_score', 0)))}</td>"
+        "</tr>"
+        for group in groups
+    )
+    return (
+        "<h2>Grouped Solutions</h2>"
+        "<table><tr><th>Rule</th><th>Resources</th><th>Priority</th></tr>"
+        f"{rows}</table>"
+    )
 
 
 def _contextual_html(model: JSON) -> str:
