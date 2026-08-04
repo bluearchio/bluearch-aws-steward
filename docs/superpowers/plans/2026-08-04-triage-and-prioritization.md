@@ -854,11 +854,13 @@ class ReportProfileTests(unittest.TestCase):
         model = build_report_model(self._result(), report_profile="technical")
         self.assertEqual(len(model["findings"]), 40)
 
-    def test_grouped_solutions_reach_the_model(self) -> None:
+    def test_grouped_solutions_reach_the_model_already_ranked(self) -> None:
         from bluearch_aws_steward.reports import build_report_model
 
         model = build_report_model(self._result(), report_profile="executive")
         self.assertEqual(len(model["grouped_solutions"]), 2)
+        scores = [group["priority_score"] for group in model["grouped_solutions"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
         self.assertEqual(model["grouped_solutions"][0]["rule"], "rule-039")
 ```
 
@@ -888,10 +890,15 @@ assembled, add:
         )[:EXECUTIVE_FINDING_LIMIT]
 ```
 
-Add one entry to the returned model dict, next to `"report_profile": report_profile,`:
+Add one entry to the returned model dict, next to `"report_profile": report_profile,`.
+The groups are ranked **here, once**, so the three renderers in Task 7 consume
+already-ordered data instead of each repeating the same sort:
 
 ```python
-        "grouped_solutions": deepcopy_json(result.get("grouped_solutions") or []),
+        "grouped_solutions": sorted(
+            deepcopy_json(result.get("grouped_solutions") or []),
+            key=lambda group: -float(group.get("priority_score") or 0.0),
+        ),
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -963,14 +970,16 @@ Expected: FAIL with `AssertionError: 'Grouped Solutions' not found`
 
 Add to `bluearch_aws_steward/reports.py`:
 
+`build_report_model` already ranked `grouped_solutions` in Task 6, so none of the
+three renderers below sorts again — they iterate in the order they are given.
+
 ```python
 def _grouped_markdown(model: JSON) -> List[str]:
     groups = model.get("grouped_solutions") or []
     if not groups:
         return []
-    ranked = sorted(groups, key=lambda group: -float(group.get("priority_score") or 0.0))
     lines = ["", "## Grouped Solutions", ""]
-    for group in ranked:
+    for group in groups:
         resources = group.get("resources") or group.get("solutions") or 0
         lines.append(
             f"- `{group.get('rule')}` — {resources} resource(s), "
@@ -986,14 +995,13 @@ def _grouped_html(model: JSON) -> str:
     groups = model.get("grouped_solutions") or []
     if not groups:
         return ""
-    ranked = sorted(groups, key=lambda group: -float(group.get("priority_score") or 0.0))
     rows = "".join(
         "<tr>"
         f"<td>{html.escape(str(group.get('rule')))}</td>"
         f"<td>{html.escape(str(group.get('resources') or group.get('solutions') or 0))}</td>"
         f"<td>{html.escape(str(group.get('priority_score', 0)))}</td>"
         "</tr>"
-        for group in ranked
+        for group in groups
     )
     return (
         "<h2>Grouped Solutions</h2>"
@@ -1041,9 +1049,8 @@ def _grouped_summary(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any
     groups = model.get("grouped_solutions") or []
     if not groups:
         return []
-    ranked = sorted(groups, key=lambda group: -float(group.get("priority_score") or 0.0))
     story: List[Any] = [Paragraph("Grouped Solutions", styles["heading"])]
-    for group in ranked:
+    for group in groups:
         resources = group.get("resources") or group.get("solutions") or 0
         story.append(
             Paragraph(
@@ -1149,9 +1156,16 @@ Expected: PASS.
 - [ ] **Step 5: Verify nothing regressed**
 
 Run: `make quality && make test`
-Expected: all clean. If any pre-existing test asserted the old default profile,
-update that test to request `technical` explicitly — the default changing is the
-intended behaviour, not a regression.
+Expected: all clean.
+
+This was checked before the plan was written: every existing caller of
+`build_report_model` without an explicit profile uses a fixture with a single
+opportunity, so the ten-finding cap cannot change their results, and
+`tests/test_contextual_reviews.py:488` asserts Well-Architected practice text that
+is rendered from `well_architected_review` rather than from `findings`. No
+existing test should need editing. If one does fail, it is asserting the old
+default rather than real behaviour — update it to request `technical` explicitly
+and say so in the commit body.
 
 - [ ] **Step 6: Commit**
 
