@@ -249,7 +249,7 @@ requires-dist = [
     { name = "kubernetes", specifier = ">=36.0.3,<37" },
     { name = "python-hcl2", specifier = ">=7.3,<8" },
     { name = "pyyaml", specifier = ">=6.0.3,<7" },
-    { name = "reportlab", specifier = ">=4.2,<5.0" },
+    { name = "reportlab", specifier = ">=4.2,<6.0" },
     { name = "textual", marker = "extra == 'tui'", specifier = ">=0.89,<1.0" },
     { name = "urllib3", specifier = ">=2.7,<3.0" },
 ]
@@ -261,10 +261,10 @@ dev = [
     { name = "build", specifier = ">=1.2,<2" },
     { name = "defusedxml", specifier = ">=0.7,<1" },
     { name = "detect-secrets", specifier = ">=1.5,<2" },
-    { name = "mypy", specifier = ">=1.10,<2" },
+    { name = "mypy", specifier = ">=1.10,<3" },
     { name = "pip-audit", specifier = ">=2.7,<3" },
     { name = "ruff", specifier = ">=0.9,<1" },
-    { name = "twine", specifier = ">=5,<7" },
+    { name = "twine", specifier = ">=5,<8" },
 ]
 
 [[package]]
