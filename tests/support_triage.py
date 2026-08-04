@@ -1,9 +1,10 @@
 """Shared fixture for triage tests.
 
 Reproduces the ordering pathology seen on a live account: iam-root-access-key-present
-carries severity medium in the catalog while sns-topic-encryption-disabled and
-api-gateway-access-logging-disabled carry high, and the latter two sort earlier
-alphabetically.
+carries severity medium in the catalog while six other findings carry high, and all
+six sort ahead of it alphabetically. Under the old severity-then-alphabetical sort,
+that pushes the root access key to 7th place, outside any reasonable "top N" window
+that an operator would actually read.
 """
 
 from __future__ import annotations
@@ -16,7 +17,11 @@ JSON = Dict[str, Any]
 
 _RULES = (
     ("api-gateway-access-logging-disabled", "high", "api-gateway", "apigw://stage/prod"),
-    ("sns-topic-encryption-disabled", "high", "sns", "sns://topic/alerts"),
+    ("api-gateway-execution-logging-disabled", "high", "api-gateway", "apigw://stage/staging"),
+    ("api-gateway-method-authorization-missing", "high", "api-gateway", "apigw://method/get-users"),
+    ("ecs-unsafe-task-definition", "high", "ecs", "ecs://task-definition/worker"),
+    ("iam-access-key-older-than-90-days", "high", "iam", "iam://user/ci/access-key/key-1"),
+    ("kms-key-rotation-disabled", "high", "kms", "kms://key/abc-123"),
     ("iam-root-access-key-present", "medium", "iam", "iam://account/root"),
     ("s3-no-lifecycle", "low", "s3", "s3://archive-bucket"),
 )
