@@ -81,11 +81,17 @@ _FACTOR_DEFINITIONS = (
 def risk_factors(finding: JSON) -> JSON:
     """Return additive contextual risk for a finding.
 
+    Accepts either an opportunity (``rule``) or a raw scan finding
+    (``rule_short_id`` / ``rule_id``). The merge path in ``recommendation_queue``
+    scores findings before they are translated into opportunities, so reading only
+    ``rule`` there would silently score every contextual factor as zero and let one
+    issue carry two contradictory priorities in the same result.
+
     Never raises. A malformed finding yields no factors, so the caller degrades to
     the base score rather than failing an entire scan.
     """
     try:
-        rule = finding.get("rule")
+        rule = finding.get("rule") or finding.get("rule_short_id") or finding.get("rule_id")
     except AttributeError:
         return {"factors": [], "total": 0.0}
     if not isinstance(rule, str):
