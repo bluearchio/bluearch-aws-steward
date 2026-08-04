@@ -307,12 +307,34 @@ class ReportProfileTests(unittest.TestCase):
         self.assertEqual(len(model["findings"]), 10)
 
     def test_mcp_export_defaults_to_executive(self) -> None:
-        import inspect
+        from bluearch_aws_steward.mcp_server import StewardMcpServer
+        from tests.support_triage import call_tool, completed_result
 
-        from bluearch_aws_steward import mcp_server
-
-        source = inspect.getsource(mcp_server)
-        self.assertNotIn('or "technical"', source)
+        server = StewardMcpServer()
+        submitted = call_tool(
+            server,
+            1,
+            "bluearch_assess",
+            {
+                "prompt": "Assess this account.",
+                "scan_result": __import__(
+                    "tests.support_triage", fromlist=["triage_scan_result"]
+                ).triage_scan_result(),
+                "objectives": ["all"],
+                "services": ["iam"],
+            },
+        )
+        assessment_id = submitted["assessment_id"]
+        # wait for completion
+        completed_result(server, assessment_id)
+        # export without specifying a profile
+        exported = call_tool(
+            server,
+            2,
+            "bluearch_export_report",
+            {"assessment_id": assessment_id, "format": "json"},
+        )
+        self.assertEqual(exported["report_profile"], "executive")
 
 
 if __name__ == "__main__":
