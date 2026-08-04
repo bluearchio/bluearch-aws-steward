@@ -1,7 +1,12 @@
 import unittest
 
 from bluearch_aws_steward.mcp_server import StewardMcpServer
-from tests.support_triage import call_tool, completed_result, triage_scan_result
+from tests.support_triage import (
+    EVIDENCE_RICH_RULE,
+    call_tool,
+    completed_result,
+    triage_scan_result,
+)
 
 
 class TriageOrderingTests(unittest.TestCase):
@@ -36,6 +41,33 @@ class TriageOrderingTests(unittest.TestCase):
             "kms-key-rotation-disabled",
         ):
             self.assertLess(root_rank, rules.index(high_severity_rule))
+
+    def test_root_access_key_outranks_a_richly_corroborated_cost_finding(self) -> None:
+        server = StewardMcpServer()
+        submitted = call_tool(
+            server,
+            2,
+            "bluearch_assess",
+            {
+                "prompt": "Assess this account.",
+                "scan_result": triage_scan_result(),
+                "objectives": ["all"],
+                "services": ["iam"],
+            },
+        )
+        result = completed_result(server, submitted["assessment_id"])
+        by_rule = {item["rule"]: item for item in result["opportunities"]}
+        rules = [item["rule"] for item in result["opportunities"]]
+
+        root = by_rule["iam-root-access-key-present"]
+        cost = by_rule[EVIDENCE_RICH_RULE]
+        # The composite score genuinely favours the cost finding. Adding 40
+        # contextual points is not enough to reverse that, so contextual risk has
+        # to rank as its own tier ahead of the composite score.
+        self.assertGreater(cost["priority"]["score"], root["priority"]["score"])
+        self.assertEqual(root["priority"]["components"]["contextual_risk"], 40.0)
+        self.assertEqual(cost["priority"]["components"]["contextual_risk"], 0.0)
+        self.assertLess(rules.index("iam-root-access-key-present"), rules.index(EVIDENCE_RICH_RULE))
 
     def test_every_opportunity_is_scored(self) -> None:
         server = StewardMcpServer()

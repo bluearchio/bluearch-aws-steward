@@ -6482,11 +6482,27 @@ def _objective_value_label(objective: str) -> str:
     return labels.get(objective, labels["all"])
 
 
+def _contextual_risk(opportunity: JSON) -> float:
+    """Contextual risk points recorded on an opportunity, 0.0 when unscored."""
+    priority = opportunity.get("priority") or {}
+    components = priority.get("components") or {}
+    value = components.get("contextual_risk")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    return float(value)
+
+
 def _opportunity_sort_key(opportunity: JSON) -> tuple:
     severity_rank = {"high": 0, "medium": 1, "low": 2}
     priority = opportunity.get("priority") or {}
+    # Contextual risk is a ranking tier, not an addend. Root credentials, publicly
+    # reachable resources and internet-exposed administrative ports outrank every
+    # finding that merely carries a higher catalog severity or a richer evidence
+    # trail; the composite score only breaks ties inside a tier.
+    contextual_risk = _contextual_risk(opportunity)
     if isinstance(priority.get("score"), (int, float)):
         return (
+            -contextual_risk,
             -float(priority["score"]),
             severity_rank.get(str(opportunity.get("severity")), 3),
             str(opportunity.get("rule") or ""),
@@ -6502,6 +6518,7 @@ def _opportunity_sort_key(opportunity: JSON) -> tuple:
         )
         risk_adjusted_savings = savings * confidence_weight
         return (
+            -contextual_risk,
             -risk_adjusted_savings,
             confidence_rank,
             -savings,
@@ -6510,7 +6527,8 @@ def _opportunity_sort_key(opportunity: JSON) -> tuple:
             str(opportunity.get("resource") or ""),
         )
     return (
-        severity_rank.get(str(opportunity.get("severity")), 3),
+        -contextual_risk,
+        float(severity_rank.get(str(opportunity.get("severity")), 3)),
         str(opportunity.get("rule") or ""),
         str(opportunity.get("resource") or ""),
     )
