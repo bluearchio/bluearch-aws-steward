@@ -46,11 +46,6 @@ def build_report_model(
     raw_items = filtered_items if include_all_findings else filtered_items[:100]
     rule_lookup = {rule_key: rule for rule in load_rules() for rule_key in (rule.short_id, rule.id)}
     items = [_normalize_report_finding(item, rule_lookup) for item in raw_items]
-    if report_profile == "executive":
-        items = sorted(
-            items,
-            key=lambda item: -float(item.get("priority_score") or 0.0),
-        )[:EXECUTIVE_FINDING_LIMIT]
     resource_context: JSON = {}
     for item in items:
         candidate = item.get("resource_ref")
@@ -74,6 +69,14 @@ def build_report_model(
     )
     contextual = result.get("assessment_mode") == "architectural_review"
     contextual_limitations = list(result.get("limitations") or []) if contextual else []
+    presented_items = items
+    findings_truncated = False
+    if report_profile == "executive" and len(items) > EXECUTIVE_FINDING_LIMIT:
+        presented_items = sorted(
+            items,
+            key=lambda item: -float(item.get("priority_score") or 0.0),
+        )[:EXECUTIVE_FINDING_LIMIT]
+        findings_truncated = True
     return {
         "schema_version": "report-0.1",
         "report_type": "bluearch-aws-steward-assessment",
@@ -131,7 +134,8 @@ def build_report_model(
             "validation_statuses": summary.get("validation_statuses") or {},
             "incomplete_sources": summary.get("incomplete_sources") or [],
         },
-        "findings": items,
+        "findings": presented_items,
+        "findings_truncated": findings_truncated,
         "focus": deepcopy_json(result.get("focus") or {}) if contextual else {},
         "architecture_neighborhood": deepcopy_json(result.get("architecture_neighborhood") or {})
         if contextual

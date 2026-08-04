@@ -230,6 +230,23 @@ class ReportProfileTests(unittest.TestCase):
         model = build_report_model(self._result(), report_profile="technical")
         self.assertEqual(len(model["findings"]), 40)
 
+    def test_executive_profile_keeps_summary_totals_truthful(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        technical_model = build_report_model(self._result(), report_profile="technical")
+        model = build_report_model(self._result(), report_profile="executive")
+
+        self.assertEqual(len(model["findings"]), 10)
+        self.assertTrue(model["findings_truncated"])
+        self.assertEqual(model["summary"]["findings"], technical_model["summary"]["findings"])
+        self.assertEqual(model["summary"]["findings"], 40)
+
+    def test_technical_profile_is_not_marked_truncated(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="technical")
+        self.assertFalse(model["findings_truncated"])
+
     def test_grouped_solutions_reach_the_model_already_ranked(self) -> None:
         from bluearch_aws_steward.reports import build_report_model
 
