@@ -16,6 +16,7 @@ as preview are not covered by a stable API compatibility promise.
 - The default report profile is now `executive`, which leads with the ten
   highest-priority findings and the grouped rollup. Request `technical`,
   `remediation` or `complete` for the previous finding-by-finding output.
+  Summary totals continue to reflect every finding; only the displayed list is capped.
 
 ### Fixed
 

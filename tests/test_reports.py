@@ -306,6 +306,14 @@ class ReportProfileTests(unittest.TestCase):
         self.assertEqual(model["report_profile"], "executive")
         self.assertEqual(len(model["findings"]), 10)
 
+    def test_mcp_export_defaults_to_executive(self) -> None:
+        import inspect
+
+        from bluearch_aws_steward import mcp_server
+
+        source = inspect.getsource(mcp_server)
+        self.assertNotIn('or "technical"', source)
+
 
 if __name__ == "__main__":
     unittest.main()

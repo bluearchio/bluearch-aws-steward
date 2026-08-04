@@ -1751,7 +1751,7 @@ class StewardMcpServer:
             assessment_request = self._assessments.get_request(assessment_id)
             report_profile = str(
                 ((assessment_request.get("result_preferences") or {}).get("report_profile"))
-                or "technical"
+                or "executive"
             )
             result["pdf_report"] = self._tool_export_report(
                 {
