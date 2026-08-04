@@ -26,7 +26,14 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from bluearch_aws_steward.reports import group_label, group_member_count, group_priority
+from bluearch_aws_steward.reports import (
+    group_label,
+    group_member_count,
+    group_priority,
+    mapping,
+    presentation_note,
+    presented_findings,
+)
 
 JSON = Dict[str, Any]
 
@@ -97,8 +104,7 @@ def render_pdf_report(model: JSON) -> bytes:
     story.extend(_coverage(summary, styles))
     story.extend(_grouped_summary(model, styles))
     if report_profile == "executive":
-        executive_model = {**model, "findings": list(model.get("findings") or [])[:25]}
-        story.extend(_findings_summary(executive_model, styles))
+        story.extend(_findings_summary(model, styles))
     elif report_profile == "remediation":
         story.extend(_finding_details(model, styles))
     else:
@@ -598,7 +604,7 @@ def _findings_summary(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[An
             Paragraph("Savings", styles["table_header"]),
         ]
     ]
-    for index, item in enumerate(model.get("findings") or [], start=1):
+    for index, item in enumerate(presented_findings(model), start=1):
         rows.append(
             [
                 Paragraph(str(index), styles["table_cell"]),
@@ -632,12 +638,20 @@ def _findings_summary(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[An
     for row_number in range(2, len(rows), 2):
         commands.append(("BACKGROUND", (0, row_number), (-1, row_number), HexColor("#F8FAFC")))
     table.setStyle(TableStyle(commands))
-    return [Paragraph("Findings summary", styles["heading"]), table]
+    return [
+        Paragraph("Findings summary", styles["heading"]),
+        Paragraph(_safe(presentation_note(model)), styles["small"]),
+        table,
+    ]
 
 
 def _finding_details(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
-    elements: List[Any] = [PageBreak(), Paragraph("Finding details", styles["heading"])]
-    findings = list(model.get("findings") or [])
+    elements: List[Any] = [
+        PageBreak(),
+        Paragraph("Finding details", styles["heading"]),
+        Paragraph(_safe(presentation_note(model)), styles["small"]),
+    ]
+    findings = presented_findings(model)
     if not findings:
         elements.append(Paragraph("No resources matched the evaluated rules.", styles["body"]))
         return elements
@@ -650,11 +664,9 @@ def _finding_details(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any
             f'{index}. <font color="{severity_color}">[{_safe(severity.upper())}]</font> {_safe(rule)}',
             styles["subheading"],
         )
-        resource_ref = (
-            item.get("resource_ref") if isinstance(item.get("resource_ref"), dict) else {}
-        )
-        remediation = item.get("remediation") if isinstance(item.get("remediation"), dict) else {}
-        apply = item.get("apply") if isinstance(item.get("apply"), dict) else {}
+        resource_ref = mapping(item.get("resource_ref"))
+        remediation = mapping(item.get("remediation"))
+        apply = mapping(item.get("apply"))
         context_rows = [
             ("Service", item.get("service") or "unknown"),
             ("Resource", item.get("resource") or "unknown"),

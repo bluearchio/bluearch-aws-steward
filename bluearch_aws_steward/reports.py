@@ -69,14 +69,16 @@ def build_report_model(
     )
     contextual = result.get("assessment_mode") == "architectural_review"
     contextual_limitations = list(result.get("limitations") or []) if contextual else []
+    # The executive cap is a presentation limit only. CSV, SARIF and the JSON
+    # model always serialise "findings" in full, so a CI consumer never silently
+    # receives 10 rows out of 1428.
     presented_items = items
-    findings_truncated = False
     if report_profile == "executive" and len(items) > EXECUTIVE_FINDING_LIMIT:
         presented_items = sorted(
             items,
             key=lambda item: -float(item.get("priority_score") or 0.0),
         )[:EXECUTIVE_FINDING_LIMIT]
-        findings_truncated = True
+    findings_truncated = len(presented_items) < len(items)
     return {
         "schema_version": "report-0.1",
         "report_type": "bluearch-aws-steward-assessment",
@@ -102,7 +104,8 @@ def build_report_model(
             "findings": len(items),
             "complete_assessment_findings": len(complete_items),
             "filtered_findings": len(filtered_items),
-            "report_truncated": len(items) < len(filtered_items),
+            "presented_findings": len(presented_items),
+            "report_truncated": len(presented_items) < len(filtered_items),
             "resources": len({str(item.get("resource")) for item in items if item.get("resource")}),
             "by_severity": dict(sorted(severity_counts.items())),
             "by_service": dict(sorted(service_counts.items())),
@@ -134,7 +137,8 @@ def build_report_model(
             "validation_statuses": summary.get("validation_statuses") or {},
             "incomplete_sources": summary.get("incomplete_sources") or [],
         },
-        "findings": presented_items,
+        "findings": items,
+        "presented_findings": presented_items,
         "findings_truncated": findings_truncated,
         "focus": deepcopy_json(result.get("focus") or {}) if contextual else {},
         "architecture_neighborhood": deepcopy_json(result.get("architecture_neighborhood") or {})
@@ -161,6 +165,36 @@ def build_report_model(
             "No AWS write actions were applied by report generation.",
         ],
     }
+
+
+def mapping(value: Any) -> JSON:
+    """A dict view of a possibly-missing nested field."""
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def presented_findings(model: JSON) -> List[JSON]:
+    """Findings a document renderer should display.
+
+    Machine-readable formats (CSV, SARIF, the JSON model) always serialise
+    ``model["findings"]`` in full. Only markdown, HTML and PDF use this narrowed
+    view, and they state how many findings they are showing out of the total.
+    """
+    presented = model.get("presented_findings")
+    if isinstance(presented, list):
+        return presented
+    findings = model.get("findings")
+    return list(findings) if isinstance(findings, list) else []
+
+
+def presentation_note(model: JSON) -> str:
+    """One line stating how many findings the document shows out of the total."""
+    summary = mapping(model.get("summary"))
+    shown = len(presented_findings(model))
+    findings = model.get("findings")
+    total = summary.get("findings")
+    if not isinstance(total, int) or isinstance(total, bool):
+        total = len(findings) if isinstance(findings, list) else shown
+    return f"Showing {shown} of {total} findings."
 
 
 def deepcopy_json(value: Any) -> Any:
@@ -300,6 +334,7 @@ def write_report(
 def _render_markdown(model: JSON) -> str:
     summary = model["summary"]
     coverage = summary["detection_coverage"]
+    shown = presented_findings(model)
     lines = [
         "# BlueArch AWS Steward Assessment",
         "",
@@ -324,10 +359,10 @@ def _render_markdown(model: JSON) -> str:
     if model.get("assessment_mode") == "architectural_review":
         lines.extend(_contextual_markdown(model))
     lines.extend(_grouped_markdown(model))
-    lines.extend(["", "## Findings", ""])
-    if not model["findings"]:
+    lines.extend(["", "## Findings", "", presentation_note(model), ""])
+    if not shown:
         lines.append("No resources matched the evaluated rules.")
-    for item in model["findings"]:
+    for item in shown:
         lines.extend(
             [
                 f"### {item.get('rule') or item.get('rule_id') or 'Unknown rule'}",
@@ -497,7 +532,7 @@ def _grouped_markdown(model: JSON) -> List[str]:
 def _render_html(model: JSON) -> str:
     summary = model["summary"]
     rows = []
-    for item in model["findings"]:
+    for item in presented_findings(model):
         savings = item.get("estimated_monthly_savings_usd")
         cost_display = (
             f"USD {float(savings):.2f} ({item.get('cost_confidence') or 'not_available'})"
@@ -529,6 +564,7 @@ def _render_html(model: JSON) -> str:
 <body><h1>BlueArch AWS Steward Assessment</h1><p class="note">Point-in-time, read-only report generated at {html.escape(str(model.get("generated_at") or "unknown"))}. Region: {html.escape(str(model.get("region") or "unknown"))}.</p>
 <section class="summary"><div class="metric">Findings <strong>{summary["findings"]}</strong></div><div class="metric">Resources <strong>{summary["resources"]}</strong></div><div class="metric">Rules <strong>{summary["rules_evaluated"]}</strong></div><div class="metric">Estimated monthly savings <strong>USD {summary["estimated_monthly_savings_usd"]:.2f}</strong></div></section>
 {contextual_html}{grouped_html}<h2>Severity</h2><ul>{severity}</ul><h2>Findings</h2>
+<p class="note">{html.escape(presentation_note(model))}</p>
 <table><thead><tr><th>Severity</th><th>Service</th><th>Rule</th><th>Resource</th><th>Sources / freshness</th><th>Priority</th><th>Risk</th><th>Evidence</th><th>Savings / confidence</th></tr></thead><tbody>{"".join(rows) or '<tr><td colspan="9">No matched resources.</td></tr>'}</tbody></table>
 <h2>Limitations</h2><ul>{"".join(f"<li>{html.escape(_limitation_text(note))}</li>" for note in model["limitations"])}</ul></body></html>"""
 

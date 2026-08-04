@@ -210,17 +210,18 @@ class ReportProfileTests(unittest.TestCase):
             ],
         }
 
-    def test_executive_profile_limits_findings_to_ten(self) -> None:
+    def test_executive_profile_limits_presented_findings_to_ten(self) -> None:
         from bluearch_aws_steward.reports import build_report_model
 
         model = build_report_model(self._result(), report_profile="executive")
-        self.assertEqual(len(model["findings"]), 10)
+        self.assertEqual(len(model["presented_findings"]), 10)
+        self.assertEqual(len(model["findings"]), 40)
 
-    def test_executive_profile_keeps_the_highest_priority_findings(self) -> None:
+    def test_executive_profile_presents_the_highest_priority_findings(self) -> None:
         from bluearch_aws_steward.reports import build_report_model
 
         model = build_report_model(self._result(), report_profile="executive")
-        scores = [item["priority_score"] for item in model["findings"]]
+        scores = [item["priority_score"] for item in model["presented_findings"]]
         self.assertEqual(scores, sorted(scores, reverse=True))
         self.assertEqual(scores[0], 39.0)
 
@@ -236,8 +237,10 @@ class ReportProfileTests(unittest.TestCase):
         technical_model = build_report_model(self._result(), report_profile="technical")
         model = build_report_model(self._result(), report_profile="executive")
 
-        self.assertEqual(len(model["findings"]), 10)
+        self.assertEqual(len(model["presented_findings"]), 10)
         self.assertTrue(model["findings_truncated"])
+        self.assertTrue(model["summary"]["report_truncated"])
+        self.assertEqual(model["summary"]["presented_findings"], 10)
         self.assertEqual(model["summary"]["findings"], technical_model["summary"]["findings"])
         self.assertEqual(model["summary"]["findings"], 40)
 
@@ -304,7 +307,39 @@ class ReportProfileTests(unittest.TestCase):
 
         model = build_report_model(self._result())
         self.assertEqual(model["report_profile"], "executive")
-        self.assertEqual(len(model["findings"]), 10)
+        self.assertEqual(len(model["presented_findings"]), 10)
+
+    def test_machine_readable_formats_are_never_truncated_by_the_default_profile(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model, render_report
+
+        model = build_report_model(self._result())
+        self.assertEqual(model["report_profile"], "executive")
+
+        rows = list(csv.DictReader(io.StringIO(str(render_report(model, "csv")))))
+        sarif = json.loads(str(render_report(model, "sarif")))
+        exported = json.loads(str(render_report(model, "json")))
+
+        # CSV and SARIF feed CI. Handing them 10 of 40 rows without saying so is
+        # silent data loss, so they must carry the complete finding set.
+        self.assertEqual(len(rows), 40)
+        self.assertEqual(len(sarif["runs"][0]["results"]), 40)
+        self.assertEqual(len(exported["findings"]), 40)
+
+    def test_document_formats_show_ten_findings_and_say_so(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model, render_report
+
+        model = build_report_model(self._result())
+        markdown = str(render_report(model, "markdown"))
+        rendered_html = str(render_report(model, "html"))
+
+        self.assertEqual(markdown.count("\n### rule-"), 10)
+        self.assertIn("Showing 10 of 40 findings.", markdown)
+        self.assertIn("Showing 10 of 40 findings.", rendered_html)
+        self.assertEqual(rendered_html.count("<td>s3://bucket-"), 10)
+
+        pdf = render_report(model, "pdf")
+        self.assertIsInstance(pdf, bytes)
+        self.assertTrue(bytes(pdf).startswith(b"%PDF-"))
 
     def test_mcp_export_defaults_to_executive(self) -> None:
         from bluearch_aws_steward.mcp_server import StewardMcpServer
