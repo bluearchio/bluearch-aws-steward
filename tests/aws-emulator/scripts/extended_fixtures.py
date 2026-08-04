@@ -12,7 +12,26 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
+
+
+# LocalEmu implements ec2.run_instances by pulling an image and starting a nested
+# container, which routinely takes minutes on a cold CI runner. Botocore's default
+# 60s read timeout with five legacy retries turns that into a ~7 minute hang and
+# then a ReadTimeoutError, which is how this seeding step failed on main.
+def fixture_client_config() -> Config:
+    """Return a fresh Config per client.
+
+    botocore mutates the Config it is handed while resolving a client, so a
+    single shared instance would leak resolved state between clients.
+    """
+    return Config(
+        connect_timeout=15,
+        read_timeout=300,
+        retries={"max_attempts": 5, "mode": "adaptive"},
+    )
+
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
@@ -56,6 +75,7 @@ class ExtendedFixtures:
                 service,
                 endpoint_url=self.endpoint_url,
                 region_name=self.region,
+                config=fixture_client_config(),
             )
         return self._clients[service]
 
