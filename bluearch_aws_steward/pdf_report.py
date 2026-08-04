@@ -49,6 +49,17 @@ SEVERITY_COLORS = {
 PageCallback = Callable[[Canvas, SimpleDocTemplate], None]
 
 
+def _count(value: Any) -> int:
+    """Count entries whether the summary field carries a list or a pre-counted int."""
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, (list, tuple, set, dict)):
+        return len(value)
+    return 0
+
+
 class _AssessmentDocTemplate(SimpleDocTemplate):
     def __init__(self, *args: Any, page_callback: PageCallback, **kwargs: Any) -> None:
         self._page_callback = page_callback
@@ -528,9 +539,9 @@ def _coverage(summary: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
             "Complete scoped evaluation",
             "Yes" if coverage.get("complete_catalog_evaluation") else "No",
         ),
-        ("Service errors", len(summary.get("service_errors") or [])),
-        ("Capability errors", len(summary.get("capability_errors") or [])),
-        ("Rules skipped", len(summary.get("rules_skipped") or [])),
+        ("Service errors", _count(summary.get("service_errors"))),
+        ("Capability errors", _count(summary.get("capability_errors"))),
+        ("Rules skipped", _count(summary.get("rules_skipped"))),
     ]
     table = Table(
         [

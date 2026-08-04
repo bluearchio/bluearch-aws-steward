@@ -163,5 +163,29 @@ class ReportTests(unittest.TestCase):
             render_report(build_report_model(self.result), "docx")
 
 
+class PdfCountFieldTests(unittest.TestCase):
+    def test_pdf_renders_when_capability_errors_is_an_int(self) -> None:
+        from bluearch_aws_steward.pdf_report import render_pdf_report
+
+        model = {
+            "generated_at": "2026-08-04T00:00:00Z",
+            "provider": "aws-sdk",
+            "report_profile": "technical",
+            "summary": {
+                "resources_scanned": 10,
+                "complete_findings": 1,
+                "capability_errors": 3,
+                "service_errors": 0,
+                "rules_skipped": 2,
+                "detection_coverage": {},
+            },
+            "findings": [],
+            "severity_counts": {},
+            "service_counts": {},
+        }
+        pdf = render_pdf_report(model)
+        self.assertTrue(pdf.startswith(b"%PDF-"))
+
+
 if __name__ == "__main__":
     unittest.main()
