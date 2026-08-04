@@ -7,6 +7,21 @@ as preview are not covered by a stable API compatibility promise.
 
 ## [Unreleased]
 
+### Changed
+
+- Findings are now ranked by contextual risk instead of alphabetically within
+  severity. Root credentials, publicly reachable resources and internet-exposed
+  administrative ports rank above lower-risk findings that merely carry a higher
+  catalog severity. Delivery order changes for every consumer.
+- The default report profile is now `executive`, which leads with the ten
+  highest-priority findings and the grouped rollup. Request `technical`,
+  `remediation` or `complete` for the previous finding-by-finding output.
+
+### Fixed
+
+- PDF export no longer fails with `TypeError` when a summary reports capability
+  errors, service errors or skipped rules as counts rather than lists.
+
 ## [0.9.0b1] - Preview candidate
 
 ### Added

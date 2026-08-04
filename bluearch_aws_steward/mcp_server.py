@@ -1793,7 +1793,7 @@ class StewardMcpServer:
             job["result"],
             include_clean_resources=bool(arguments.get("include_clean_resources")),
             filters=arguments.get("filters") or {},
-            report_profile=str(arguments.get("report_profile") or "technical"),
+            report_profile=str(arguments.get("report_profile") or "executive"),
             include_all_findings=bool(arguments.get("include_all_findings", True)),
         )
         content = render_report(model, report_format)

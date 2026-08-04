@@ -30,7 +30,7 @@ def build_report_model(
     *,
     include_clean_resources: bool = False,
     filters: JSON | None = None,
-    report_profile: str = "technical",
+    report_profile: str = "executive",
     include_all_findings: bool = True,
 ) -> JSON:
     if report_profile not in REPORT_PROFILES:

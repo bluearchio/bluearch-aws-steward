@@ -299,6 +299,13 @@ class ReportProfileTests(unittest.TestCase):
 
         self.assertGreater(len(with_groups), len(without_groups))
 
+    def test_default_profile_is_executive(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result())
+        self.assertEqual(model["report_profile"], "executive")
+        self.assertEqual(len(model["findings"]), 10)
+
 
 if __name__ == "__main__":
     unittest.main()
