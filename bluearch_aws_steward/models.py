@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-ASSESSMENT_MODES = ("guided", "focused", "full_report")
+ASSESSMENT_MODES = ("guided", "focused", "full_report", "architectural_review")
 ASSESSMENT_OBJECTIVES = (
     "cost_optimization",
     "security",
@@ -51,6 +51,55 @@ class ResourceRef:
 
     def to_dict(self) -> Dict[str, Any]:
         return {key: value for key, value in asdict(self).items() if value is not None}
+
+
+@dataclass(frozen=True)
+class ArchitectureNode:
+    node_id: str
+    kind: str
+    resource_ref: ResourceRef
+    source: str
+    confidence: str
+    observed_at: str
+    facts: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            **asdict(self),
+            "resource_ref": self.resource_ref.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
+class ArchitectureEdge:
+    source_node_id: str
+    target_node_id: str
+    relationship_type: str
+    source: str
+    confidence: str
+    observed_at: str
+    evidence_provenance: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ReviewIntent:
+    operation: str
+    focus: List[ResourceRef]
+    objectives: List[str] = field(default_factory=list)
+    answers: Dict[str, Any] = field(default_factory=dict)
+    max_relationship_hops: int = 1
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "operation": self.operation,
+            "focus": [resource.to_dict() for resource in self.focus],
+            "objectives": list(self.objectives),
+            "answers": dict(self.answers),
+            "max_relationship_hops": self.max_relationship_hops,
+        }
 
 
 @dataclass

@@ -10,6 +10,10 @@ coordinates approved remediation. Users do not operate Steward scan commands.
 User prompt
   -> Codex / IDE MCP client
       -> BlueArch AWS Steward MCP server
+          -> focus and operation resolver
+          -> versioned Well-Architected applicability packs
+          -> bounded typed architecture graph
+          -> safe Terraform and CloudFormation context
           -> complete BlueArch knowledge catalog
           -> reviewed executable detector registry
           -> Security Hub / Compute Optimizer / Cost Optimization Hub adapters
@@ -19,7 +23,9 @@ User prompt
           -> live user-owned AWS account
 ```
 
-The AWS APIs are the source of truth. Assessment state exists only in the MCP
+For a normal architecture question, Steward reviews one exact resource or
+proposed change and its permitted relationship neighborhood. A full-account
+scan occurs only from explicit full-scan intent. The AWS APIs are the source of truth. Assessment state exists only in the MCP
 process, expires after 15 minutes, and is never treated as a persistent resource
 inventory. The store keeps every matched finding, matched resource, coverage
 receipt, skipped rule, capability error, service state, and AWS context
@@ -85,11 +91,16 @@ with the same filters and sort until it returns `null`.
 
 ## One-Time Runtime Setup
 
-Until a packaged binary is published, install the runtime from this repository:
+Install the published package, then register its MCP runtime:
 
 ```bash
-make dev-sync
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade bluearch-aws-steward
+bluearch-steward mcp install --client codex
 ```
+
+Contributors can use `make dev-sync` from a source checkout.
 
 The installation provides `bluearch-steward-mcp`. Configure an MCP client with:
 
@@ -123,6 +134,7 @@ Steward advertises the MCP `prompts` capability and implements `prompts/list`
 and `prompts/get`. The built-in templates are:
 
 - `readiness_and_coverage`
+- `contextual_architecture_review`
 - `comprehensive_assessment`
 - `cost_optimization`
 - `security_review`
@@ -159,7 +171,7 @@ selection does not change the read/write safety policy.
 The typed capability registry generates two separate policies:
 
 - `iam/read-policy.json` contains only the control-plane reads needed by the
-  100 executable rules.
+  executable rules, contextual relationship collectors, and optional signal adapters.
 - `iam/remediation-policy.json` contains only the eight guarded write actions.
 
 Run `make iam-policies` after changing a collector or remediation capability,
@@ -192,10 +204,17 @@ These behaviors are defaults and do not need to be repeated in user prompts:
 - guarded remediation is always one finding on one resource and requires the
   user to approve the exact live-revalidated plan before `allow_write=true`.
 
-Before profile discovery, `bluearch_assess` checks whether the request contains
-an explicit objective and supported AWS service scope. If either is unclear, it
-returns `status: input_required` without reading AWS configuration or calling
-AWS. The result includes:
+Before profile discovery, `bluearch_assess` first distinguishes a contextual
+review from an explicit full assessment. A contextual review resolves focus in
+this order: explicit resource references, changed IaC resources, exact resource
+identifier in the prompt, then user selection. It never guesses among multiple
+resources. Steward then asks at most five applicability questions per round.
+No AWS call is made until focus and required context are resolved.
+
+For explicit full assessments, Steward checks whether the request contains an
+objective and supported AWS service scope. Missing input returns
+`status: input_required` without reading AWS configuration or calling AWS. Both
+flows return:
 
 - `questions`: structured multi-select objective and service fields for capable clients.
 - `possible_responses`: concise labels, natural-language replies, and exact tool arguments.
@@ -243,19 +262,24 @@ overprovisioning validation.
 ## Agent Flow
 
 1. Call `bluearch_assess` with the user's natural-language goal.
-2. Let native MCP elicitation collect and resume missing input when available. If the tool still returns `input_required`, present the labels in `possible_responses` and ask the returned question as the compatibility fallback.
-3. Wait for the user's selection or equivalent natural-language answer, merge that response's `arguments` into `resume.arguments`, and retry `resume.tool`.
-4. If it returns `authentication_required`, show the external AWS sign-in action and wait for completion. Never request credentials in chat.
-5. Poll `bluearch_get_scan_status` only after an assessment ID is returned.
-6. Call `bluearch_get_scan_results` after completion, or with
+2. For a contextual request, pass `assessment_mode: architectural_review` and
+   preserve the returned focus/context questions. Full-account scans require
+   explicit `assessment_mode: full_report` or equivalent user intent.
+3. Let native MCP elicitation collect and resume missing input when available. If the tool still returns `input_required`, present the labels in `possible_responses` and ask the returned question as the compatibility fallback.
+4. Wait for the user's selection or equivalent natural-language answer, merge that response's `arguments` into `resume.arguments`, and retry `resume.tool`.
+5. If it returns `authentication_required`, show the external AWS sign-in action and wait for completion. Never request credentials in chat.
+6. Poll `bluearch_get_scan_status` only after an assessment ID is returned.
+7. Call `bluearch_get_scan_results` after completion, or with
    `include_partial: true` while it runs when the user asks to see progress.
-7. Present grouped totals and returned solution cards, not raw account inventory. For every displayed card, include evidence, risk, estimated monthly savings or `not_estimated`, cost confidence, and remediation support.
-8. Call `bluearch_query_results` to refine, facet, sort, or paginate the same snapshot. Do not start another scan.
-9. Use `bluearch_get_resource_details` for one selected resource.
-10. Explain or plan using `assessment_id` and `finding_id`. Planning re-reads live AWS and may ask for retention or lifecycle settings.
-11. Present the exact plan, IAM permissions, warnings, rollback guidance, expiry, and digest. Ask for explicit approval of that plan.
-12. Call apply only after separate approval of one exact plan, using the server-issued `plan_id`, `plan_digest`, and `allow_write: true`. Steward rechecks the account, region, and live resource state before writing, then verifies it.
-13. Always obtain the terminal Yes/No PDF choice from `bluearch_get_scan_results`; the user does not need to request reporting in the original prompt.
+8. For contextual results, lead with focus, architecture neighborhood, WAF
+   statuses, recommendations, unknowns, excluded scope, and read provenance.
+   For full results, present grouped totals and solution cards instead of raw inventory.
+9. Call `bluearch_query_results` to refine, facet, sort, or paginate the same snapshot. Do not start another scan.
+10. Use `bluearch_get_resource_details` for one selected resource.
+11. Explain or plan using `assessment_id` and `finding_id`. Planning re-reads live AWS and may ask for retention or lifecycle settings.
+12. Present the exact plan, IAM permissions, warnings, rollback guidance, expiry, and digest. Ask for explicit approval of that plan.
+13. Call apply only after separate approval of one exact plan, using the server-issued `plan_id`, `plan_digest`, and `allow_write: true`. Steward rechecks the account, region, and live resource state before writing, then verifies it.
+14. Always obtain the terminal Yes/No PDF choice from `bluearch_get_scan_results`; the user does not need to request reporting in the original prompt.
 
 Do not start another assessment to refine completed results. Use
 `bluearch_cancel_assessment` when the user asks to stop; completed service

@@ -15,4 +15,5 @@ tests/aws-emulator/.artifacts/
 tests/aws-live/.artifacts/
 tests/eks-lab/.artifacts/
 tests/aws-eks-live/.artifacts/
+tests/contextual/.artifacts/
 tests/aws-eks-live/infra/.terraform/

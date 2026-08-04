@@ -66,6 +66,8 @@ def build_report_model(
     cost_confidence_counts = Counter(
         str(estimate.get("confidence") or "not_available") for estimate in cost_estimates
     )
+    contextual = result.get("assessment_mode") == "architectural_review"
+    contextual_limitations = list(result.get("limitations") or []) if contextual else []
     return {
         "schema_version": "report-0.1",
         "report_type": "bluearch-aws-steward-assessment",
@@ -76,6 +78,8 @@ def build_report_model(
         "account_id": result.get("account_id") or resource_context.get("account_id"),
         "region": result.get("region") or resource_context.get("region"),
         "service": result.get("service"),
+        "assessment_mode": result.get("assessment_mode"),
+        "operation": result.get("operation"),
         "point_in_time": True,
         "read_only": True,
         "include_clean_resources": include_clean_resources,
@@ -118,7 +122,24 @@ def build_report_model(
             "incomplete_sources": summary.get("incomplete_sources") or [],
         },
         "findings": items,
-        "limitations": [
+        "focus": deepcopy_json(result.get("focus") or {}) if contextual else {},
+        "architecture_neighborhood": deepcopy_json(result.get("architecture_neighborhood") or {})
+        if contextual
+        else {},
+        "context_questions": deepcopy_json(result.get("context_questions") or {})
+        if contextual
+        else {},
+        "well_architected_review": deepcopy_json(result.get("well_architected_review") or {})
+        if contextual
+        else {},
+        "recommendations": deepcopy_json(result.get("recommendations") or []) if contextual else [],
+        "hidden_relevant_concerns": deepcopy_json(result.get("hidden_relevant_concerns") or [])
+        if contextual
+        else [],
+        "evidence_ledger": deepcopy_json(result.get("evidence_ledger") or {}) if contextual else {},
+        "excluded_scope": deepcopy_json(result.get("excluded_scope") or {}) if contextual else {},
+        "limitations": contextual_limitations
+        + [
             "This report represents a point-in-time AWS assessment.",
             "Only resources matched by evaluated rules are listed.",
             "Unevaluated catalog rules are not treated as passing.",
@@ -126,6 +147,10 @@ def build_report_model(
             "No AWS write actions were applied by report generation.",
         ],
     }
+
+
+def deepcopy_json(value: Any) -> Any:
+    return json.loads(json.dumps(value, default=str))
 
 
 def _normalize_report_finding(item: JSON, rule_lookup: Dict[str, Any]) -> JSON:
@@ -282,6 +307,8 @@ def _render_markdown(model: JSON) -> str:
         "",
     ]
     lines.extend(f"- **{key.title()}**: {value}" for key, value in summary["by_severity"].items())
+    if model.get("assessment_mode") == "architectural_review":
+        lines.extend(_contextual_markdown(model))
     lines.extend(["", "## Findings", ""])
     if not model["findings"]:
         lines.append("No resources matched the evaluated rules.")
@@ -320,8 +347,86 @@ def _render_markdown(model: JSON) -> str:
     lines.extend(
         ["## Coverage", "", f"```json\n{json.dumps(coverage, indent=2, sort_keys=True)}\n```", ""]
     )
-    lines.extend(["## Limitations", "", *[f"- {text}" for text in model["limitations"]], ""])
+    lines.extend(
+        [
+            "## Limitations",
+            "",
+            *[f"- {_limitation_text(value)}" for value in model["limitations"]],
+            "",
+        ]
+    )
     return "\n".join(lines)
+
+
+def _contextual_markdown(model: JSON) -> List[str]:
+    focus = (model.get("focus") or {}).get("resources") or []
+    selected_knowledge = (model.get("focus") or {}).get("selected_knowledge") or []
+    graph = model.get("architecture_neighborhood") or {}
+    review = model.get("well_architected_review") or {}
+    ledger = model.get("evidence_ledger") or {}
+    excluded = model.get("excluded_scope") or {}
+    lines = [
+        "",
+        "## Contextual Architecture Review",
+        "",
+        f"- Assessment mode: `{model.get('assessment_mode') or 'architectural_review'}`",
+        f"- Operation: `{model.get('operation') or 'review'}`",
+    ]
+    lines.extend(
+        f"- Focus: `{item.get('arn') or item.get('resource_id') or 'unknown'}` ({item.get('service') or 'unknown'})"
+        for item in focus
+    )
+    lines.extend(
+        [
+            f"- Architecture neighborhood: **{len(graph.get('nodes') or [])} nodes**, **{len(graph.get('edges') or [])} relationships**",
+            f"- Read operations: **{ledger.get('operation_count', 0)}/{ledger.get('operation_budget', 0)}**",
+            f"- Excluded services: `{', '.join(excluded.get('services') or []) or 'none'}`",
+            f"- Selected knowledge packs: `{', '.join(str(item.get('service')) for item in selected_knowledge) or 'none'}`",
+            "",
+            "### Observed Relationships",
+            "",
+        ]
+    )
+    if graph.get("edges"):
+        for edge in graph.get("edges") or []:
+            lines.append(
+                "- "
+                f"`{edge.get('source_node_id')}` --{edge.get('relationship_type')}--> "
+                f"`{edge.get('target_node_id')}` "
+                f"(source={edge.get('source')}, confidence={edge.get('confidence')})"
+            )
+    else:
+        lines.append(
+            "- No relationship was observed. This does not prove that no dependency exists."
+        )
+    lines.extend(["", "### Well-Architected Practice Ledger", ""])
+    for pillar in review.get("pillars") or []:
+        counts = pillar.get("status_counts") or {}
+        lines.append(f"#### {str(pillar.get('pillar') or 'unknown').replace('_', ' ').title()}")
+        lines.append(
+            "- Statuses: " + ", ".join(f"{key}={value}" for key, value in counts.items() if value)
+        )
+        for practice in pillar.get("practices") or []:
+            lines.extend(
+                [
+                    f"- `{practice.get('practice_id')}` **{practice.get('status')}**: "
+                    f"{practice.get('title') or 'Untitled practice'}",
+                    f"  Source: {practice.get('source_url') or 'not available'}; "
+                    f"catalog `{practice.get('catalog_revision') or 'unknown'}`; "
+                    f"reviewed `{practice.get('reviewed_at') or 'unknown'}`.",
+                ]
+            )
+    unknowns = (model.get("context_questions") or {}).get("unknown_facts") or []
+    if unknowns:
+        lines.extend(["", f"Unknown context: `{', '.join(unknowns)}`"])
+    concerns = model.get("hidden_relevant_concerns") or []
+    if concerns:
+        lines.extend(["", "### High-Impact Cross-Pillar Concerns", ""])
+        lines.extend(
+            f"- **{item.get('severity')}** `{item.get('rule')}` on `{item.get('resource')}`"
+            for item in concerns
+        )
+    return lines
 
 
 def _render_html(model: JSON) -> str:
@@ -351,60 +456,115 @@ def _render_html(model: JSON) -> str:
         f"<li><strong>{html.escape(key.title())}</strong>: {value}</li>"
         for key, value in summary["by_severity"].items()
     )
+    contextual_html = _contextual_html(model)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>BlueArch AWS Steward Assessment</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#172033}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #d8dee9;padding:.55rem;text-align:left}}th{{background:#edf2f7}}.summary{{display:flex;gap:2rem;flex-wrap:wrap}}.metric{{font-size:1.4rem}}.note{{color:#536174}}</style></head>
 <body><h1>BlueArch AWS Steward Assessment</h1><p class="note">Point-in-time, read-only report generated at {html.escape(str(model.get("generated_at") or "unknown"))}. Region: {html.escape(str(model.get("region") or "unknown"))}.</p>
 <section class="summary"><div class="metric">Findings <strong>{summary["findings"]}</strong></div><div class="metric">Resources <strong>{summary["resources"]}</strong></div><div class="metric">Rules <strong>{summary["rules_evaluated"]}</strong></div><div class="metric">Estimated monthly savings <strong>USD {summary["estimated_monthly_savings_usd"]:.2f}</strong></div></section>
-<h2>Severity</h2><ul>{severity}</ul><h2>Findings</h2>
+{contextual_html}<h2>Severity</h2><ul>{severity}</ul><h2>Findings</h2>
 <table><thead><tr><th>Severity</th><th>Service</th><th>Rule</th><th>Resource</th><th>Sources / freshness</th><th>Priority</th><th>Risk</th><th>Evidence</th><th>Savings / confidence</th></tr></thead><tbody>{"".join(rows) or '<tr><td colspan="9">No matched resources.</td></tr>'}</tbody></table>
-<h2>Limitations</h2><ul>{"".join(f"<li>{html.escape(str(note))}</li>" for note in model["limitations"])}</ul></body></html>"""
+<h2>Limitations</h2><ul>{"".join(f"<li>{html.escape(_limitation_text(note))}</li>" for note in model["limitations"])}</ul></body></html>"""
+
+
+def _contextual_html(model: JSON) -> str:
+    if model.get("assessment_mode") != "architectural_review":
+        return ""
+    focus = (model.get("focus") or {}).get("resources") or []
+    graph = model.get("architecture_neighborhood") or {}
+    review = model.get("well_architected_review") or {}
+    selected_knowledge = (model.get("focus") or {}).get("selected_knowledge") or []
+    ledger = model.get("evidence_ledger") or {}
+    excluded = model.get("excluded_scope") or {}
+    focus_items = "".join(
+        f"<li><code>{html.escape(str(item.get('arn') or item.get('resource_id') or 'unknown'))}</code> ({html.escape(str(item.get('service') or 'unknown'))})</li>"
+        for item in focus
+    )
+    practice_rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(str(practice.get('practice_id') or 'unknown'))}</td>"
+        f"<td>{html.escape(str(pillar.get('pillar') or 'unknown'))}</td>"
+        f"<td>{html.escape(str(practice.get('status') or 'unknown'))}</td>"
+        f"<td>{html.escape(', '.join(practice.get('matched_native_rules') or []))}</td>"
+        f"<td>{html.escape(str(practice.get('source_url') or 'not available'))}</td>"
+        "</tr>"
+        for pillar in review.get("pillars") or []
+        for practice in pillar.get("practices") or []
+    )
+    return (
+        "<h2>Contextual Architecture Review</h2>"
+        f"<p><strong>Assessment mode:</strong> {html.escape(str(model.get('assessment_mode') or 'architectural_review'))}</p>"
+        f"<p><strong>Operation:</strong> {html.escape(str(model.get('operation') or 'review'))}</p>"
+        f"<ul>{focus_items}</ul>"
+        f"<p>{len(graph.get('nodes') or [])} nodes and {len(graph.get('edges') or [])} observed relationships. "
+        "An unobserved relationship is not proof that no dependency exists.</p>"
+        f"<p><strong>Read operations:</strong> {ledger.get('operation_count', 0)}/{ledger.get('operation_budget', 0)}. "
+        f"<strong>Selected packs:</strong> {html.escape(', '.join(str(item.get('service')) for item in selected_knowledge) or 'none')}. "
+        f"<strong>Excluded services:</strong> {html.escape(', '.join(excluded.get('services') or []) or 'none')}.</p>"
+        "<table><thead><tr><th>Practice</th><th>Pillar</th><th>Status</th><th>Matched rules</th><th>Source</th></tr></thead>"
+        f"<tbody>{practice_rows}</tbody></table>"
+    )
 
 
 def _render_csv(model: JSON) -> str:
     output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "generated_at",
-            "provider",
-            "account_id",
-            "region",
-            "observed_at",
-            "evidence_source",
-            "evidence_confidence",
-            "recommendation_fingerprint",
-            "sources",
-            "source_count",
-            "validation_status",
-            "freshness_observed_at",
-            "source_disagreement",
-            "priority_score",
-            "priority_components",
-            "severity",
-            "service",
-            "catalog_rule_id",
-            "rule",
-            "rule_description",
-            "matching_criteria",
-            "resource",
-            "resource_type",
-            "resource_arn",
-            "observed_evidence",
-            "cost_estimate_status",
-            "estimated_monthly_savings_usd",
-            "cost_confidence",
-            "cost_estimate_basis",
-            "risk",
-            "value",
-            "remediation_summary",
-            "remediation_actions",
-            "verification",
-            "safety_level",
-            "requires_approval",
-            "apply_supported",
-        ]
-    )
+    fields = [
+        "record_type",
+        "generated_at",
+        "provider",
+        "account_id",
+        "region",
+        "observed_at",
+        "evidence_source",
+        "evidence_confidence",
+        "recommendation_fingerprint",
+        "sources",
+        "source_count",
+        "validation_status",
+        "freshness_observed_at",
+        "source_disagreement",
+        "priority_score",
+        "priority_components",
+        "severity",
+        "service",
+        "assessment_mode",
+        "operation",
+        "well_architected_practices",
+        "business_impact",
+        "recommendation_confidence",
+        "missing_context",
+        "catalog_rule_id",
+        "rule",
+        "rule_description",
+        "matching_criteria",
+        "resource",
+        "resource_type",
+        "resource_arn",
+        "observed_evidence",
+        "cost_estimate_status",
+        "estimated_monthly_savings_usd",
+        "cost_confidence",
+        "cost_estimate_basis",
+        "risk",
+        "value",
+        "remediation_summary",
+        "remediation_actions",
+        "verification",
+        "safety_level",
+        "requires_approval",
+        "apply_supported",
+        "practice_id",
+        "practice_title",
+        "practice_pillar",
+        "practice_status",
+        "practice_source_url",
+        "catalog_revision",
+        "reviewed_at",
+        "applicability",
+        "practice_evidence",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
     for item in model["findings"]:
         resource_ref = (
             item.get("resource_ref") if isinstance(item.get("resource_ref"), dict) else {}
@@ -412,46 +572,81 @@ def _render_csv(model: JSON) -> str:
         remediation = item.get("remediation") if isinstance(item.get("remediation"), dict) else {}
         apply = item.get("apply") if isinstance(item.get("apply"), dict) else {}
         writer.writerow(
-            [
-                model.get("generated_at", ""),
-                model.get("provider", ""),
-                resource_ref.get("account_id") or model.get("account_id", ""),
-                model.get("region", ""),
-                item.get("evidence_observed_at", ""),
-                item.get("evidence_source", ""),
-                item.get("evidence_confidence", ""),
-                item.get("recommendation_fingerprint", ""),
-                " | ".join(item.get("sources") or []),
-                item.get("source_count", ""),
-                item.get("validation_status", ""),
-                item.get("freshness_observed_at", ""),
-                _compact_value(item.get("source_disagreement")),
-                item.get("priority_score", ""),
-                _compact_value(item.get("priority_components")),
-                item.get("severity", ""),
-                item.get("service", ""),
-                item.get("catalog_rule_id", ""),
-                item.get("rule") or item.get("rule_id", ""),
-                item.get("rule_description", ""),
-                item.get("matching_criteria", ""),
-                item.get("resource", ""),
-                resource_ref.get("resource_type", ""),
-                resource_ref.get("arn", ""),
-                item.get("observed_evidence", ""),
-                item.get("cost_estimate_status", ""),
-                item.get("estimated_monthly_savings_usd", ""),
-                item.get("cost_confidence", ""),
-                item.get("cost_estimate_basis", ""),
-                item.get("risk_detail", ""),
-                item.get("value", ""),
-                remediation.get("summary", ""),
-                " | ".join(str(action) for action in remediation.get("actions") or []),
-                remediation.get("verification", ""),
-                remediation.get("safety_level", ""),
-                _compact_value(remediation.get("requires_approval")),
-                _compact_value(apply.get("supported")),
-            ]
+            {
+                "record_type": "finding",
+                "generated_at": model.get("generated_at", ""),
+                "provider": model.get("provider", ""),
+                "account_id": resource_ref.get("account_id") or model.get("account_id", ""),
+                "region": model.get("region", ""),
+                "observed_at": item.get("evidence_observed_at", ""),
+                "evidence_source": item.get("evidence_source", ""),
+                "evidence_confidence": item.get("evidence_confidence", ""),
+                "recommendation_fingerprint": item.get("recommendation_fingerprint", ""),
+                "sources": " | ".join(item.get("sources") or []),
+                "source_count": item.get("source_count", ""),
+                "validation_status": item.get("validation_status", ""),
+                "freshness_observed_at": item.get("freshness_observed_at", ""),
+                "source_disagreement": _compact_value(item.get("source_disagreement")),
+                "priority_score": item.get("priority_score", ""),
+                "priority_components": _compact_value(item.get("priority_components")),
+                "severity": item.get("severity", ""),
+                "service": item.get("service", ""),
+                "assessment_mode": model.get("assessment_mode", ""),
+                "operation": model.get("operation", ""),
+                "well_architected_practices": " | ".join(
+                    item.get("well_architected_practices") or []
+                ),
+                "business_impact": item.get("business_impact", ""),
+                "recommendation_confidence": item.get("confidence", ""),
+                "missing_context": " | ".join(item.get("missing_context") or []),
+                "catalog_rule_id": item.get("catalog_rule_id", ""),
+                "rule": item.get("rule") or item.get("rule_id", ""),
+                "rule_description": item.get("rule_description", ""),
+                "matching_criteria": item.get("matching_criteria", ""),
+                "resource": item.get("resource", ""),
+                "resource_type": resource_ref.get("resource_type", ""),
+                "resource_arn": resource_ref.get("arn", ""),
+                "observed_evidence": item.get("observed_evidence", ""),
+                "cost_estimate_status": item.get("cost_estimate_status", ""),
+                "estimated_monthly_savings_usd": item.get("estimated_monthly_savings_usd", ""),
+                "cost_confidence": item.get("cost_confidence", ""),
+                "cost_estimate_basis": item.get("cost_estimate_basis", ""),
+                "risk": item.get("risk_detail", ""),
+                "value": item.get("value", ""),
+                "remediation_summary": remediation.get("summary", ""),
+                "remediation_actions": " | ".join(
+                    str(action) for action in remediation.get("actions") or []
+                ),
+                "verification": remediation.get("verification", ""),
+                "safety_level": remediation.get("safety_level", ""),
+                "requires_approval": _compact_value(remediation.get("requires_approval")),
+                "apply_supported": _compact_value(apply.get("supported")),
+            }
         )
+    if model.get("assessment_mode") == "architectural_review":
+        for pillar in (model.get("well_architected_review") or {}).get("pillars") or []:
+            for practice in pillar.get("practices") or []:
+                writer.writerow(
+                    {
+                        "record_type": "well_architected_practice",
+                        "generated_at": model.get("generated_at", ""),
+                        "provider": model.get("provider", ""),
+                        "account_id": model.get("account_id", ""),
+                        "region": model.get("region", ""),
+                        "service": practice.get("service", ""),
+                        "assessment_mode": model.get("assessment_mode", ""),
+                        "operation": model.get("operation", ""),
+                        "practice_id": practice.get("practice_id", ""),
+                        "practice_title": practice.get("title", ""),
+                        "practice_pillar": pillar.get("pillar", ""),
+                        "practice_status": practice.get("status", ""),
+                        "practice_source_url": practice.get("source_url", ""),
+                        "catalog_revision": practice.get("catalog_revision", ""),
+                        "reviewed_at": practice.get("reviewed_at", ""),
+                        "applicability": _compact_value(practice.get("applicability")),
+                        "practice_evidence": _compact_value(practice.get("evidence")),
+                    }
+                )
     return output.getvalue()
 
 
@@ -485,6 +680,11 @@ def _render_sarif(model: JSON) -> str:
                         (item.get("remediation") or {}).get("requires_approval", True)
                     ),
                     "applySupported": bool((item.get("apply") or {}).get("supported")),
+                    "assessmentMode": model.get("assessment_mode"),
+                    "wellArchitectedPractices": item.get("well_architected_practices") or [],
+                    "businessImpact": item.get("business_impact"),
+                    "recommendationConfidence": item.get("confidence"),
+                    "missingContext": item.get("missing_context") or [],
                 },
             }
         )
@@ -494,7 +694,23 @@ def _render_sarif(model: JSON) -> str:
         "runs": [
             {
                 "tool": {"driver": {"name": "BlueArch AWS Steward", "version": __version__}},
-                "invocations": [{"properties": {"region": model.get("region")}}],
+                "invocations": [
+                    {
+                        "properties": {
+                            "region": model.get("region"),
+                            "assessmentMode": model.get("assessment_mode"),
+                            "focus": model.get("focus") or {},
+                            "operation": model.get("operation"),
+                            "architectureNeighborhood": model.get("architecture_neighborhood")
+                            or {},
+                            "wellArchitectedReview": model.get("well_architected_review") or {},
+                            "hiddenRelevantConcerns": model.get("hidden_relevant_concerns") or [],
+                            "excludedScope": model.get("excluded_scope") or {},
+                            "evidenceLedger": model.get("evidence_ledger") or {},
+                            "limitations": model.get("limitations") or [],
+                        }
+                    }
+                ],
                 "results": results,
             }
         ],
@@ -508,3 +724,9 @@ def _sarif_level(severity: str) -> str:
     if severity == "medium":
         return "warning"
     return "note"
+
+
+def _limitation_text(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("message") or value.get("detail") or json.dumps(value, sort_keys=True))
+    return str(value)

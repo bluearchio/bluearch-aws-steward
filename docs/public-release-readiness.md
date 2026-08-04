@@ -13,6 +13,10 @@ Remediation is experimental and limited to explicitly documented guarded
 operations. The preview must not be described as a complete CSPM, an autonomous
 AWS administrator, or an organization-wide compliance product.
 
+The `0.9.0b1` candidate adds contextual architecture reviews. Its default path
+reviews one live or proposed resource and a bounded dependency neighborhood;
+full-account scanning remains available only after explicit full-scan intent.
+
 ### Stable Release
 
 A stable release requires measured recommendation quality, durable local policy
@@ -93,6 +97,11 @@ Remote evidence for the clean preview repository:
 ### 3. Recommendation Experience
 
 - [x] Define the progressive result contract in `result-experience-plan.md`.
+- [x] Resolve an explicit live/IaC focus or return guided choices without guessing.
+- [x] Select applicable Well-Architected knowledge across all 17 runtime scopes.
+- [x] Bound contextual traversal to 25 graph nodes and 50 deduplicated reads.
+- [x] Include evidence provenance, excluded scope, unknowns, and limitations.
+- [x] Prove through LocalEmu that an S3 review does not collect unrelated EC2 or RDS data.
 - [ ] Return an executive summary and bounded top-action queue by default.
 - [ ] Add facets for objective, service, severity, source, confidence, effort,
   owner, remediation safety, and freshness.
@@ -175,6 +184,11 @@ Publish a preview only when all items below have evidence:
 5. No credentials, customer identifiers, generated reports, or private operations exist in Git history.
 6. Security threat modeling is complete and no known critical/high issue remains.
 7. The version is marked `alpha`, `beta`, or `preview`, not stable.
+
+For `0.9.0b1`, the pushed candidate must additionally pass the contextual
+benchmark, knowledge-pack validation, focused LocalEmu stdio flow, all report
+renderers, and package-install smoke tests. Local success is necessary but does
+not replace a green remote run for the release commit.
 
 ## Stable Release Gate
 

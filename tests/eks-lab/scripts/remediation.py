@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -11,7 +12,8 @@ from typing import Any, Dict
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_DIR = Path(__file__).resolve().parent
-if str(ROOT) not in sys.path:
+USE_INSTALLED_PACKAGE = os.environ.get("BLUEARCH_STEWARD_USE_INSTALLED_PACKAGE") == "1"
+if not USE_INSTALLED_PACKAGE and str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -47,8 +49,17 @@ def _assess(mcp: McpProcess, rules: tuple[str, ...]) -> tuple[str, list[JSON]]:
             "kubernetes_context": "kind-bluearch-eks-lab",
             "eks_cluster_name": "bluearch-eks-vulnerable",
             "kubernetes_namespaces": ["bluearch-eks-lab", "kube-system"],
-            "kubernetes_metrics_file": str(ROOT / "tests/eks-lab/metrics.json"),
-            "eks_fixture_map": str(ROOT / "tests/eks-lab/fixture-map.yml"),
+            "kubernetes_metrics_file": os.environ.get(
+                "BLUEARCH_STEWARD_EKS_METRICS_FILE",
+                str(ROOT / "tests/eks-lab/metrics.json"),
+            ),
+            "kubernetes_metrics_source": os.environ.get(
+                "BLUEARCH_STEWARD_EKS_METRICS_SOURCE", "file"
+            ),
+            "eks_fixture_map": os.environ.get(
+                "BLUEARCH_STEWARD_EKS_FIXTURE_MAP",
+                str(ROOT / "tests/eks-lab/fixture-map.yml"),
+            ),
             "max_returned_resources": 100,
             "max_returned_findings": 100,
             "prompt": "Build a read-only EKS remediation validation snapshot. Do not apply changes.",

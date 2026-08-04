@@ -75,6 +75,20 @@ def main() -> int:
             cwd=temp_dir,
             env=environment,
         )
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from bluearch_aws_steward.knowledge_packs import "
+                    "validate_knowledge_packs; validate_knowledge_packs()"
+                ),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            cwd=temp_dir,
+            env=environment,
+        )
         entry_points = (
             installed
             / f"bluearch_aws_steward-{args.expected_version}.dist-info"

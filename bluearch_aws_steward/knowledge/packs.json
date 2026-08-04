@@ -1,0 +1,313 @@
+{
+  "schema_version": "knowledge-packs-0.1",
+  "release": "0.9.0b1",
+  "reviewed_at": "2026-08-03",
+  "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+  "questions": {
+    "environment": {
+      "prompt": "Which environment does this resource support?",
+      "description": "Production criticality changes availability, recovery, and change-safety guidance.",
+      "options": ["production", "staging", "development", "sandbox", "unknown"]
+    },
+    "criticality": {
+      "prompt": "How critical is this resource to the business?",
+      "description": "Criticality determines the acceptable blast radius and verification depth.",
+      "options": ["mission_critical", "business_critical", "supporting", "experimental", "unknown"]
+    },
+    "owner": {
+      "prompt": "Who owns the workload or data?",
+      "description": "Ownership is required before destructive or disruptive work can be considered safe.",
+      "options": ["known", "shared", "unassigned", "unknown"]
+    },
+    "data_classification": {
+      "prompt": "What data classification applies?",
+      "description": "Data sensitivity controls encryption, exposure, retention, and audit requirements.",
+      "options": ["public", "internal", "confidential", "restricted", "unknown"]
+    },
+    "access_pattern": {
+      "prompt": "What access pattern should this resource support?",
+      "description": "Expected readers, writers, protocols, and frequency affect the correct architecture.",
+      "options": ["public_read", "private_application", "internal_users", "batch", "mixed", "unknown"]
+    },
+    "retention": {
+      "prompt": "What retention or deletion requirement applies?",
+      "description": "Retention determines lifecycle, backup, archival, and deletion safeguards.",
+      "options": ["ephemeral", "under_30_days", "under_1_year", "multi_year", "indefinite", "unknown"]
+    },
+    "recovery": {
+      "prompt": "What recovery objective is required?",
+      "description": "RTO and RPO determine redundancy, backup, and failover controls.",
+      "options": ["minutes", "hours", "one_day", "best_effort", "unknown"]
+    },
+    "traffic": {
+      "prompt": "What traffic or utilization pattern is expected?",
+      "description": "Steady, bursty, seasonal, and low-volume workloads need different scaling choices.",
+      "options": ["steady", "bursty", "seasonal", "low_volume", "unknown"]
+    },
+    "growth": {
+      "prompt": "How much growth should the design tolerate?",
+      "description": "Expected growth determines whether current capacity and topology will remain suitable.",
+      "options": ["stable", "10x", "100x", "1000x", "unknown"]
+    },
+    "consumers": {
+      "prompt": "Which systems consume or depend on this resource?",
+      "description": "Known consumers improve dependency and blast-radius confidence.",
+      "options": ["single_workload", "multiple_workloads", "external_clients", "unknown"]
+    },
+    "exposure": {
+      "prompt": "Should this resource be internet reachable?",
+      "description": "Intended exposure is required to distinguish a risk from a deliberate interface.",
+      "options": ["internet_public", "partner_only", "private_network", "local_only", "unknown"]
+    },
+    "compliance": {
+      "prompt": "Does a regulated or contractual control set apply?",
+      "description": "Compliance context can strengthen encryption, logging, and retention requirements.",
+      "options": ["regulated", "contractual", "internal_policy", "none", "unknown"]
+    }
+  },
+  "families": {
+    "account_foundation": {
+      "services": ["iam", "cloudtrail", "cloudwatch"],
+      "summary": "Identity, account governance, auditability, and operational visibility."
+    },
+    "storage_and_protection": {
+      "services": ["s3", "efs", "ec2", "kms", "secrets-manager"],
+      "summary": "Data protection, lifecycle, recovery, storage efficiency, and network placement."
+    },
+    "compute_and_runtime": {
+      "services": ["ec2", "lambda", "ecs", "eks"],
+      "summary": "Runtime security, capacity, availability, scaling, observability, and deployment safety."
+    },
+    "data_platforms": {
+      "services": ["rds", "dynamodb"],
+      "summary": "Data availability, performance, security, recovery, and cost-efficient capacity."
+    },
+    "edge_and_integration": {
+      "services": ["alb", "api-gateway", "sns", "sqs"],
+      "summary": "Ingress, routing, authentication, asynchronous integration, and service protection."
+    }
+  },
+  "profiles": {
+    "iam": {
+      "family": "account_foundation",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.iam.account", "aws.iam.user", "aws.iam.role", "aws.iam.policy"],
+      "required_facts": ["environment", "criticality", "owner", "compliance"],
+      "waf_practices": ["SEC01-BP02", "SEC02-BP01", "SEC02-BP02", "SEC02-BP03", "SEC03-BP02", "SEC03-BP07", "SEC05-BP01"],
+      "relationship_collectors": ["assumes_role", "attached_to", "governed_by"],
+      "evidence_requirements": ["principal type", "attached policy scope", "credential age", "MFA state"],
+      "business_impact": "Compromised or over-privileged identities can expose every workload reachable by the principal.",
+      "safe_correction": "Plan least-privilege changes per principal, identify active callers, and preserve a tested recovery path.",
+      "verification": "Re-read identity configuration and validate intended callers before retiring old access."
+    },
+    "cloudtrail": {
+      "family": "account_foundation",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.cloudtrail.trail"],
+      "required_facts": ["environment", "criticality", "owner", "retention", "compliance"],
+      "waf_practices": ["SEC04-BP01", "SEC04-BP02", "SEC08-BP01", "OPS04-BP01", "OPS04-BP02"],
+      "relationship_collectors": ["logs_to", "encrypted_by", "monitors"],
+      "evidence_requirements": ["multi-region state", "log validation", "KMS key", "CloudWatch destination"],
+      "business_impact": "Missing or incomplete audit trails delay incident response and weaken forensic evidence.",
+      "safe_correction": "Preserve existing destinations and permissions while adding validated audit coverage.",
+      "verification": "Confirm delivery, validation, encryption, and alarm integration with fresh control-plane reads."
+    },
+    "cloudwatch": {
+      "family": "account_foundation",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.logs.log-group"],
+      "required_facts": ["environment", "criticality", "owner", "retention", "compliance"],
+      "waf_practices": ["OPS04-BP01", "OPS04-BP02", "COST05-BP02"],
+      "relationship_collectors": ["receives_logs_from", "encrypted_by", "notifies"],
+      "evidence_requirements": ["retention days", "stored bytes", "KMS key", "log producer"],
+      "business_impact": "Insufficient retention hides operational evidence; unlimited retention can create avoidable cost.",
+      "safe_correction": "Choose retention from incident, legal, and operational requirements before changing it.",
+      "verification": "Re-read retention and confirm new events remain queryable."
+    },
+    "s3": {
+      "family": "storage_and_protection",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": [{"practice_ids": ["REL09-BP01", "REL09-BP03"], "fact": "retention", "operator": "not_in", "values": ["ephemeral"]}]},
+      "resource_types": ["aws.s3.bucket"],
+      "required_facts": ["environment", "data_classification", "access_pattern", "retention", "consumers"],
+      "waf_practices": ["SEC02-BP01", "SEC05-BP01", "SEC05-BP02", "SEC07-BP01", "SEC07-BP02", "SEC08-BP01", "SEC09-BP02", "REL09-BP01", "REL09-BP03", "OPS04-BP02", "COST05-BP02", "SUS04-BP03"],
+      "relationship_collectors": ["encrypted_by", "logs_to", "replicates_to", "publishes_to", "consumed_by"],
+      "evidence_requirements": ["public access block", "bucket policy", "encryption", "versioning", "lifecycle", "logging", "replication"],
+      "business_impact": "Incorrect access, durability, or lifecycle settings can expose data, prevent recovery, or accumulate cost.",
+      "safe_correction": "Validate consumers and data requirements before changing policy, encryption, lifecycle, or retention.",
+      "verification": "Re-read bucket controls and test an approved access and recovery path."
+    },
+    "efs": {
+      "family": "storage_and_protection",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": [{"practice_ids": ["REL09-BP01", "REL09-BP03"], "fact": "retention", "operator": "not_in", "values": ["ephemeral"]}]},
+      "resource_types": ["aws.efs.file-system"],
+      "required_facts": ["environment", "data_classification", "retention", "recovery", "consumers"],
+      "waf_practices": ["SEC08-BP01", "SEC08-BP02", "REL09-BP01", "REL09-BP03", "PERF02-BP02", "COST04-BP05", "COST05-BP02", "COST05-BP03", "COST06-BP02", "SUS04-BP02"],
+      "relationship_collectors": ["encrypted_by", "mounted_by", "deployed_in", "backed_up_by"],
+      "evidence_requirements": ["encryption", "KMS key", "mount targets", "access points", "lifecycle policy", "backup coverage"],
+      "business_impact": "Shared file-system changes can affect every mounted workload and its recovery posture.",
+      "safe_correction": "Identify mounts and backup recovery before migration, lifecycle, or throughput changes.",
+      "verification": "Confirm mounts remain healthy and recovery controls still meet requirements."
+    },
+    "ec2": {
+      "family": "compute_and_runtime",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.ec2.instance", "aws.ec2.volume", "aws.ec2.security-group", "aws.ec2.vpc", "aws.ec2.snapshot", "aws.ec2.address", "aws.ec2.image"],
+      "required_facts": ["environment", "criticality", "owner", "traffic", "growth"],
+      "waf_practices": ["SEC05-BP01", "SEC05-BP02", "SEC06-BP01", "SEC08-BP01", "REL07-BP02", "OPS04-BP02", "PERF02-BP01", "PERF02-BP02", "COST04-BP05", "COST06-BP02", "COST09-BP03"],
+      "relationship_collectors": ["attached_to", "protected_by", "deployed_in", "uses_image", "backed_up_by"],
+      "evidence_requirements": ["instance state", "network interfaces", "security groups", "attached volumes", "image", "utilization signals"],
+      "business_impact": "Compute or network changes can interrupt traffic, lose unprotected data, or expand attack surface.",
+      "safe_correction": "Map traffic, storage, image, and recovery dependencies before resize, detach, stop, or delete actions.",
+      "verification": "Validate health, traffic, storage attachment, and monitoring after an approved change."
+    },
+    "kms": {
+      "family": "storage_and_protection",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.kms.key"],
+      "required_facts": ["environment", "criticality", "owner", "data_classification", "compliance"],
+      "waf_practices": ["SEC08-BP01", "SEC08-BP02", "SEC08-BP04"],
+      "relationship_collectors": ["encrypts", "governed_by", "used_by"],
+      "evidence_requirements": ["key manager", "rotation state", "key state", "aliases", "observed consumers"],
+      "business_impact": "A key policy or lifecycle mistake can expose data or make dependent data permanently unavailable.",
+      "safe_correction": "Inventory consumers and preserve decrypt access before policy, rotation, disablement, or deletion changes.",
+      "verification": "Re-read key state and validate encryption and decryption through approved dependent services."
+    },
+    "secrets-manager": {
+      "family": "storage_and_protection",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.secretsmanager.secret"],
+      "required_facts": ["environment", "criticality", "owner", "consumers", "compliance"],
+      "waf_practices": ["SEC02-BP01", "SEC02-BP02", "SEC02-BP05", "SEC08-BP01"],
+      "relationship_collectors": ["encrypted_by", "consumed_by", "rotated_by"],
+      "evidence_requirements": ["rotation state", "rotation schedule", "KMS key", "resource policy", "observed consumers"],
+      "business_impact": "Stale or broadly accessible credentials can compromise every consumer and complicate incident recovery.",
+      "safe_correction": "Identify consumers and validate dual-credential or rollback behavior before enabling rotation.",
+      "verification": "Confirm rotation succeeds and consumers authenticate without exposing secret values."
+    },
+    "lambda": {
+      "family": "compute_and_runtime",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.lambda.function"],
+      "required_facts": ["environment", "criticality", "owner", "traffic", "consumers"],
+      "waf_practices": ["SEC03-BP02", "SEC06-BP01", "REL05-BP02", "REL07-BP01", "REL07-BP02", "REL11-BP01", "OPS04-BP02", "PERF02-BP02", "COST04-BP05", "COST06-BP02"],
+      "relationship_collectors": ["assumes_role", "invoked_by", "publishes_to", "deployed_in", "logs_to"],
+      "evidence_requirements": ["execution role", "tracing", "timeout", "memory", "invocation and error metrics", "event sources"],
+      "business_impact": "Runtime, permission, or concurrency changes can break event processing or amplify downstream failures.",
+      "safe_correction": "Validate callers, retries, concurrency, and downstream capacity before changing runtime behavior.",
+      "verification": "Confirm successful invocations, latency, errors, throttles, and downstream health."
+    },
+    "ecs": {
+      "family": "compute_and_runtime",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.ecs.service", "aws.ecs.task-definition", "aws.ecs.cluster"],
+      "required_facts": ["environment", "criticality", "owner", "traffic", "recovery"],
+      "waf_practices": ["SEC03-BP02", "SEC06-BP01", "REL05-BP02", "REL07-BP01", "REL11-BP01", "OPS05-BP01", "PERF02-BP02", "COST04-BP05"],
+      "relationship_collectors": ["runs_task", "assumes_role", "routes_to", "logs_to", "deployed_in"],
+      "evidence_requirements": ["service health", "task definition", "roles", "network mode", "load balancer", "deployment state"],
+      "business_impact": "Task or service changes can cause failed deployments, privilege expansion, or traffic loss.",
+      "safe_correction": "Use immutable revisions, deployment health checks, and rollback criteria before changing tasks.",
+      "verification": "Confirm desired tasks are healthy, traffic is routed, and rollback remains available."
+    },
+    "eks": {
+      "family": "compute_and_runtime",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.eks.cluster", "aws.eks.nodegroup", "kubernetes.workload", "kubernetes.pod"],
+      "required_facts": ["environment", "criticality", "owner", "traffic", "recovery"],
+      "waf_practices": ["SEC03-BP02", "SEC05-BP01", "SEC05-BP02", "SEC06-BP01", "REL07-BP02", "REL09-BP01", "REL10-BP01", "REL11-BP01", "OPS04-BP02", "OPS05-BP01", "PERF02-BP01", "PERF02-BP02", "COST06-BP02"],
+      "relationship_collectors": ["runs_on", "exposes", "protected_by", "assumes_role", "logs_to", "deployed_in"],
+      "evidence_requirements": ["cluster endpoint", "control-plane logging", "node groups", "add-ons", "workload specs", "pods", "events", "metrics"],
+      "business_impact": "Cluster and workload changes can affect many services at once; unsafe capacity or rollout changes can disrupt production.",
+      "safe_correction": "Correlate cluster, nodes, workloads, disruption budgets, traffic, and capacity before proposing a change.",
+      "verification": "Confirm control-plane state, Ready capacity, workload availability, events, and service routing."
+    },
+    "rds": {
+      "family": "data_platforms",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": [{"practice_ids": ["REL09-BP01", "REL10-BP01", "REL13-BP01"], "fact": "recovery", "operator": "not_in", "values": ["best_effort"]}]},
+      "resource_types": ["aws.rds.db-instance"],
+      "required_facts": ["environment", "criticality", "data_classification", "recovery", "traffic"],
+      "waf_practices": ["SEC05-BP01", "SEC08-BP01", "REL09-BP01", "REL10-BP01", "REL13-BP01", "PERF02-BP02", "PERF03-BP01", "PERF03-BP02", "COST04-BP05", "COST06-BP02"],
+      "relationship_collectors": ["deployed_in", "protected_by", "encrypted_by", "backed_up_by", "replicates_to", "consumed_by"],
+      "evidence_requirements": ["public access", "subnet group", "security groups", "encryption", "Multi-AZ", "backups", "replicas", "utilization"],
+      "business_impact": "Database changes can cause data loss, connection failures, or prolonged downtime across dependent applications.",
+      "safe_correction": "Establish consumers, backups, restore evidence, failover needs, and maintenance windows first.",
+      "verification": "Validate connectivity, replication, backups, performance, and application health."
+    },
+    "dynamodb": {
+      "family": "data_platforms",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.dynamodb.table"],
+      "required_facts": ["environment", "criticality", "data_classification", "traffic", "growth"],
+      "waf_practices": ["SEC08-BP01", "REL07-BP01", "REL09-BP01", "REL10-BP01", "PERF02-BP02", "PERF03-BP01", "PERF03-BP02", "COST04-BP05", "COST05-BP02", "COST06-BP02"],
+      "relationship_collectors": ["encrypted_by", "consumed_by", "streams_to", "backed_up_by", "replicates_to"],
+      "evidence_requirements": ["billing mode", "capacity", "utilization", "indexes", "streams", "PITR", "replicas"],
+      "business_impact": "Capacity, index, or lifecycle changes can throttle applications or remove data without a recovery path.",
+      "safe_correction": "Validate traffic distribution, indexes, consumers, recovery, and growth before changing capacity or storage class.",
+      "verification": "Confirm latency, throttles, capacity, streams, and recovery controls."
+    },
+    "alb": {
+      "family": "edge_and_integration",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.elasticloadbalancingv2.load-balancer"],
+      "required_facts": ["environment", "criticality", "traffic", "exposure", "consumers"],
+      "waf_practices": ["SEC05-BP01", "SEC05-BP02", "SEC09-BP02", "REL05-BP02", "REL06-BP01", "REL11-BP01", "OPS04-BP02", "PERF04-BP01", "COST04-BP05", "COST06-BP02"],
+      "relationship_collectors": ["routes_to", "protected_by", "logs_to", "uses_certificate", "deployed_in"],
+      "evidence_requirements": ["scheme", "listeners", "TLS policy", "certificates", "target health", "access logging", "request metrics"],
+      "business_impact": "Ingress changes can expose services, reject clients, or stop traffic to every registered target.",
+      "safe_correction": "Validate client compatibility, certificates, listener rules, and target health before changing ingress.",
+      "verification": "Test TLS, routing, target health, logging, and expected client access."
+    },
+    "api-gateway": {
+      "family": "edge_and_integration",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.apigateway.rest-api", "aws.apigateway.stage", "aws.apigateway.method"],
+      "required_facts": ["environment", "criticality", "traffic", "exposure", "consumers"],
+      "waf_practices": ["SEC03-BP07", "SEC05-BP01", "SEC05-BP02", "SEC09-BP02", "REL05-BP01", "REL06-BP01", "OPS04-BP02", "PERF04-BP01"],
+      "relationship_collectors": ["invokes", "protected_by", "logs_to", "uses_authorizer", "deployed_in"],
+      "evidence_requirements": ["methods", "authorization", "stages", "logging", "tracing", "integrations", "usage controls"],
+      "business_impact": "API authentication, routing, or throttling mistakes can expose data or make client traffic fail at scale.",
+      "safe_correction": "Identify clients and integration contracts before changing authorization, stages, or request handling.",
+      "verification": "Test authorized and denied requests, integration health, logs, latency, and throttles."
+    },
+    "sns": {
+      "family": "edge_and_integration",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.sns.topic"],
+      "required_facts": ["environment", "criticality", "data_classification", "consumers", "exposure"],
+      "waf_practices": ["SEC05-BP01", "SEC08-BP01", "SEC09-BP03", "REL04-BP01", "REL05-BP03"],
+      "relationship_collectors": ["subscribed_by", "published_by", "encrypted_by", "protected_by"],
+      "evidence_requirements": ["topic policy", "encryption", "subscriptions", "publishers", "delivery status"],
+      "business_impact": "Policy or subscription changes can leak messages or silently interrupt downstream notifications.",
+      "safe_correction": "Confirm publishers, subscribers, retry behavior, and message sensitivity before policy changes.",
+      "verification": "Publish a safe test event and confirm intended deliveries and denied unauthorized access."
+    },
+    "sqs": {
+      "family": "edge_and_integration",
+      "operations": ["create", "update", "review", "delete", "troubleshoot", "optimize"],
+      "applicability": {"default": "applicable", "predicates": []},
+      "resource_types": ["aws.sqs.queue"],
+      "required_facts": ["environment", "criticality", "data_classification", "consumers", "recovery"],
+      "waf_practices": ["SEC05-BP01", "SEC08-BP01", "SEC09-BP03", "REL04-BP02", "REL05-BP03", "REL11-BP03"],
+      "relationship_collectors": ["subscribes_to", "consumed_by", "encrypted_by", "redrives_to", "protected_by"],
+      "evidence_requirements": ["queue policy", "encryption", "redrive policy", "visibility timeout", "consumers", "age and depth metrics"],
+      "business_impact": "Queue configuration changes can expose payloads, duplicate work, or strand messages for dependent consumers.",
+      "safe_correction": "Validate consumers, processing duration, retries, and dead-letter handling before queue changes.",
+      "verification": "Confirm send, receive, retry, and dead-letter behavior with non-sensitive test messages."
+    }
+  }
+}

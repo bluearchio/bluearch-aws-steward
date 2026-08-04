@@ -19,7 +19,8 @@ from defusedxml import ElementTree as DefusedET
 from defusedxml.common import DefusedXmlException
 
 ROOT = Path(__file__).resolve().parents[3]
-if str(ROOT) not in sys.path:
+USE_INSTALLED_PACKAGE = os.environ.get("BLUEARCH_STEWARD_USE_INSTALLED_PACKAGE") == "1"
+if not USE_INSTALLED_PACKAGE and str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from bluearch_aws_steward.aws_endpoints import is_loopback_aws_endpoint  # noqa: E402

@@ -21,6 +21,11 @@ from bluearch_aws_steward.aws_endpoints import (
 from bluearch_aws_steward.catalog import filter_rules
 from bluearch_aws_steward.catalog_registry import catalog_coverage, search_catalog_rules
 from bluearch_aws_steward.catalog_sync import EVALUATION_MODES
+from bluearch_aws_steward.contextual_review import (
+    ContextualReviewError,
+    prepare_contextual_review,
+    run_contextual_review,
+)
 from bluearch_aws_steward.finding_sources import (
     MAX_IMPORT_PAYLOAD_BYTES,
     SUPPORTED_FINDING_SOURCES,
@@ -32,6 +37,7 @@ from bluearch_aws_steward.iac_patches import (
     validate_iac_patch,
 )
 from bluearch_aws_steward.investigation import investigate_finding, investigation_kind
+from bluearch_aws_steward.knowledge_packs import knowledge_pack_manifest
 from bluearch_aws_steward.mcp_prompts import (
     McpPromptError,
     get_mcp_prompt,
@@ -135,6 +141,11 @@ MCP_INSTRUCTIONS = (
     "to stop pending work without discarding completed reads. Completed and cancelled assessments "
     "offer a native Yes/No PDF choice. Use bluearch_query_results to filter, facet, sort, "
     "or paginate the complete snapshot without rescanning. Use bluearch_get_resource_details for a returned resource. "
+    "Use assessment_mode=architectural_review for one resource or proposed Terraform or CloudFormation "
+    "change. Never guess among resources and never turn that request into a full-account scan. Ask the "
+    "returned focus and context questions, preserve unknown answers, and report the selected knowledge, "
+    "typed neighborhood, excluded scope, WAF practice statuses, and evidence ledger. "
+    "Run assessment_mode=full_report only after the user explicitly requests the complete supported scan. "
     "Use bluearch_investigate_resource to deepen a supported finding with live dependencies, evidence "
     "coverage, hypotheses, recovery, ownership, and blast-radius facts before proposing a change. "
     "For EKS and Kubernetes findings, use bluearch_generate_iac_patch and "
@@ -735,16 +746,23 @@ class StewardMcpServer:
     ) -> None:
         self._aws_context_loader = aws_context_loader or discover_aws_context
         self._aws_provider_factory = aws_provider_factory or _client
-        self._assessments = assessment_store or AssessmentStore(
-            lambda arguments: _tool_advise(
-                arguments,
-                provider_factory=self._aws_provider_factory,
-            )
-        )
+        self._assessments = assessment_store or AssessmentStore(self._run_assessment)
         self._aws_identity_loader = aws_identity_loader or (
             lambda arguments: self._aws_provider_factory(arguments).caller_identity()
         )
         self._remediation_plans = remediation_plan_store or RemediationPlanStore()
+
+    def _run_assessment(self, arguments: JSON) -> JSON:
+        if arguments.get("assessment_mode") == "architectural_review":
+            return run_contextual_review(
+                arguments,
+                provider_factory=self._aws_provider_factory,
+                base_runner=_tool_advise,
+            )
+        return _tool_advise(
+            arguments,
+            provider_factory=self._aws_provider_factory,
+        )
 
     def handle(self, request: JSON) -> Optional[JSON]:
         method = request.get("method")
@@ -1259,17 +1277,19 @@ class StewardMcpServer:
             prepared, refinement = _prepare_assessment_refinement(arguments)
             if refinement is not None:
                 return refinement
-            eks_input = _eks_connection_input_required(prepared)
+            contextual_iac_only = _contextual_iac_only(prepared)
+            eks_input = None if contextual_iac_only else _eks_connection_input_required(prepared)
             if eks_input is not None:
                 return eks_input
-            prepared, blocked, aws_identity = self._prepare_live_aws_arguments(
-                "bluearch_assess",
-                prepared,
-                require_region=True,
-                validate_identity=True,
-            )
-            if blocked is not None:
-                return blocked
+            if not contextual_iac_only:
+                prepared, blocked, aws_identity = self._prepare_live_aws_arguments(
+                    "bluearch_assess",
+                    prepared,
+                    require_region=True,
+                    validate_identity=True,
+                )
+                if blocked is not None:
+                    return blocked
         else:
             prepared, refinement = _prepare_assessment_refinement(arguments)
             if refinement is not None:
@@ -1846,7 +1866,7 @@ class StewardMcpServer:
             )
 
         if not arguments.get("refresh"):
-            return _resource_detail_response(
+            response = _resource_detail_response(
                 assessment_id=assessment_id,
                 resource=resource,
                 matches=matches,
@@ -1854,6 +1874,8 @@ class StewardMcpServer:
                 expires_at=job.get("expires_at"),
                 source="assessment_snapshot",
             )
+            response.update(_contextual_resource_detail(result, resource))
+            return response
 
         refresh_arguments = self._assessments.get_request(assessment_id)
         refresh_arguments.pop("scan_result", None)
@@ -1869,7 +1891,7 @@ class StewardMcpServer:
 
         refreshed = _tool_find_opportunities(refresh_arguments)
         refreshed_matches = _matching_opportunities(refreshed, resource, rule)
-        return _resource_detail_response(
+        response = _resource_detail_response(
             assessment_id=assessment_id,
             resource=resource,
             matches=refreshed_matches,
@@ -1877,6 +1899,8 @@ class StewardMcpServer:
             expires_at=None,
             source="live_refresh",
         )
+        response.update(_contextual_resource_detail(result, resource))
+        return response
 
     def _tool_investigate_resource(self, arguments: JSON) -> JSON:
         if arguments.get("resource") and not arguments.get("finding"):
@@ -2287,6 +2311,12 @@ def _prepare_assessment_refinement(arguments: JSON) -> Tuple[JSON, Optional[JSON
     prepared = dict(arguments)
     prompt = str(arguments.get("prompt") or "").strip()
 
+    if _is_contextual_review_request(arguments, prompt):
+        try:
+            return prepare_contextual_review(arguments)
+        except ContextualReviewError as exc:
+            raise McpToolError(str(exc)) from exc
+
     objectives = _objective_selection_from_arguments(arguments)
     if not objectives:
         objectives = _explicit_objectives_from_prompt(prompt)
@@ -2332,6 +2362,69 @@ def _prepare_assessment_refinement(arguments: JSON) -> Tuple[JSON, Optional[JSON
         prepared["_assessment_intent"] = intent.to_dict()
         return prepared, None
     return prepared, _assessment_refinement_input_required(prepared, missing)
+
+
+def _is_contextual_review_request(arguments: JSON, prompt: str) -> bool:
+    requested = str(arguments.get("assessment_mode") or "").strip().lower()
+    if requested == "full_report":
+        return False
+    if requested == "architectural_review" or isinstance(arguments.get("review_context"), dict):
+        return True
+    # A supplied scan snapshot belongs to the established assessment workflow unless
+    # the caller explicitly opts into an architectural review. Reinterpreting it here
+    # would turn existing investigate/remediate flows into a focus-selection prompt.
+    if isinstance(arguments.get("scan_result"), dict):
+        return False
+    text = prompt.casefold()
+    if "arn:aws" in text or re.search(
+        r"\b(?:s3|ebs|ec2|rds|lambda|efs|eks|ecs|kms|sns|sqs|alb|api-gateway)://",
+        text,
+    ):
+        return True
+    resource_terms = (
+        " bucket",
+        " function",
+        " cluster",
+        " database",
+        " db instance",
+        " table",
+        " queue",
+        " topic",
+        " load balancer",
+        " role",
+        " security group",
+        " volume",
+        " log group",
+        " trail",
+        " file system",
+    )
+    operation_terms = (
+        "deploy",
+        "create",
+        "provision",
+        "update",
+        "change",
+        "delete",
+        "remove",
+        "review",
+        "debug",
+        "troubleshoot",
+        "optimize",
+    )
+    return any(term in text for term in resource_terms) and any(
+        term in text for term in operation_terms
+    )
+
+
+def _contextual_iac_only(arguments: JSON) -> bool:
+    if arguments.get("assessment_mode") != "architectural_review":
+        return False
+    intent = arguments.get("_review_intent") or {}
+    focus = intent.get("focus") or []
+    return bool(focus) and all(
+        isinstance(resource, dict) and resource.get("provider") in {"iac", "design"}
+        for resource in focus
+    )
 
 
 def _assessment_mode(
@@ -3836,7 +3929,88 @@ def _tools() -> List[JSON]:
         "assessment_mode": {
             "type": "string",
             "enum": list(ASSESSMENT_MODES),
-            "description": "Guided clarification, focused assessment, or complete active-rule report mode.",
+            "description": (
+                "Guided clarification, focused assessment, contextual architectural review, "
+                "or complete active-rule report mode."
+            ),
+        },
+        "review_context": {
+            "type": "object",
+            "description": (
+                "Bounded resource, operation, dependency, and IaC context for architectural_review."
+            ),
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "enum": [
+                        "create",
+                        "update",
+                        "review",
+                        "delete",
+                        "troubleshoot",
+                        "optimize",
+                    ],
+                },
+                "resource_refs": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "oneOf": [
+                            {"type": "string"},
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "provider": {"type": "string"},
+                                    "service": {
+                                        "type": "string",
+                                        "enum": list(AWS_SCAN_SERVICES),
+                                    },
+                                    "resource_type": {"type": "string"},
+                                    "resource_id": {"type": "string"},
+                                    "resource": {"type": "string"},
+                                    "arn": {"type": "string"},
+                                    "region": {"type": "string"},
+                                    "account_id": {"type": "string"},
+                                    "display_name": {"type": "string"},
+                                },
+                                "additionalProperties": False,
+                            },
+                        ]
+                    },
+                },
+                "iac": {
+                    "type": "object",
+                    "properties": {
+                        "workspace_root": {"type": "string"},
+                        "paths": {
+                            "type": "array",
+                            "maxItems": 20,
+                            "items": {"type": "string"},
+                        },
+                        "terraform_plan_json_path": {"type": ["string", "null"]},
+                        "format": {
+                            "type": "string",
+                            "enum": ["auto", "terraform", "cloudformation"],
+                            "default": "auto",
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                "answers": {
+                    "type": "object",
+                    "description": "Ephemeral architecture facts supplied by the user.",
+                    "additionalProperties": {
+                        "type": ["string", "number", "integer", "boolean", "null"]
+                    },
+                },
+                "max_relationship_hops": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2,
+                    "default": 1,
+                },
+            },
+            "additionalProperties": False,
         },
         "result_preferences": {
             "type": "object",
@@ -3923,9 +4097,9 @@ def _tools() -> List[JSON]:
         {
             "name": "bluearch_assess",
             "description": (
-                "Primary natural-language entrypoint. Start an ephemeral background assessment of live AWS state "
-                "and return an assessment ID immediately. Returns input_required first when the desired outcome, "
-                "supported service scope, or AWS context needs clarification."
+                "Primary natural-language entrypoint. By default, review one AWS resource or proposed IaC "
+                "change and its bounded Well-Architected neighborhood. Start a full-account scan only when "
+                "explicitly requested. Returns input_required rather than guessing missing focus or context."
             ),
             "inputSchema": {
                 "type": "object",
@@ -4677,6 +4851,64 @@ def _resource_detail_response(
     }
 
 
+def _contextual_resource_detail(result: JSON, resource: str) -> JSON:
+    if result.get("assessment_mode") != "architectural_review":
+        return {}
+    neighborhood = result.get("architecture_neighborhood") or {}
+    matching_node_ids = {
+        str(node.get("node_id"))
+        for node in neighborhood.get("nodes") or []
+        if resource
+        in {
+            str((node.get("resource_ref") or {}).get("resource_id") or ""),
+            str((node.get("resource_ref") or {}).get("arn") or ""),
+            str((node.get("resource_ref") or {}).get("display_name") or ""),
+        }
+        or str((node.get("resource_ref") or {}).get("resource_id") or "") in resource
+    }
+    edges = [
+        edge
+        for edge in neighborhood.get("edges") or []
+        if edge.get("source_node_id") in matching_node_ids
+        or edge.get("target_node_id") in matching_node_ids
+    ]
+    related_ids = {
+        str(edge.get("source_node_id"))
+        for edge in edges
+        if edge.get("source_node_id") not in matching_node_ids
+    } | {
+        str(edge.get("target_node_id"))
+        for edge in edges
+        if edge.get("target_node_id") not in matching_node_ids
+    }
+    nodes = [
+        node
+        for node in neighborhood.get("nodes") or []
+        if node.get("node_id") in matching_node_ids | related_ids
+    ]
+    practices = [
+        practice
+        for pillar in (result.get("well_architected_review") or {}).get("pillars") or []
+        for practice in pillar.get("practices") or []
+        if practice.get("service")
+        in {str((node.get("resource_ref") or {}).get("service")) for node in nodes}
+    ]
+    architecture_context = {
+        "nodes": nodes,
+        "relationships": edges,
+        "absence_is_not_proof": bool(neighborhood.get("absence_is_not_proof", True)),
+    }
+    return {
+        "architecture_context": architecture_context,
+        "architecture_neighborhood": architecture_context,
+        "well_architected_context": {
+            "practices": practices,
+            "status_counts": (result.get("well_architected_review") or {}).get("status_counts")
+            or {},
+        },
+    }
+
+
 def _tool_get_coverage(arguments: JSON) -> JSON:
     rules = filter_rules(service=arguments.get("service"), query=arguments.get("query"))
     full_coverage = catalog_coverage(
@@ -4686,9 +4918,11 @@ def _tool_get_coverage(arguments: JSON) -> JSON:
     resource_types = {
         "cloudtrail": "trail",
         "cloudwatch": "log-group",
+        "dynamodb": "table",
         "ec2": "ec2-ebs-network-resource",
         "ecs": "workload",
         "efs": "file-system",
+        "eks": "cluster-nodegroup-and-kubernetes-workload",
         "iam": "account-control",
         "lambda": "function",
         "rds": "db-instance",
@@ -4725,6 +4959,7 @@ def _tool_get_coverage(arguments: JSON) -> JSON:
         service["rule_count"] += 1
 
     services = sorted(by_service.values(), key=lambda item: item["service"])
+    contextual_manifest = knowledge_pack_manifest()
     return {
         "schema_version": "0.2",
         "coverage_policy": (
@@ -4757,6 +4992,20 @@ def _tool_get_coverage(arguments: JSON) -> JSON:
         "service_count": len(services),
         "rule_count": len(rules),
         "services": services,
+        "contextual_reviews": {
+            "enabled": True,
+            "pack_schema_version": contextual_manifest["schema_version"],
+            "pack_release": contextual_manifest["release"],
+            "runtime_scope_count": contextual_manifest["runtime_scope_count"],
+            "native_rule_count": contextual_manifest["native_rule_count"],
+            "waf_catalog_row_count": contextual_manifest["waf_catalog_row_count"],
+            "waf_practice_count": contextual_manifest["waf_practice_count"],
+            "mapped_native_rules": contextual_manifest["mapped_native_rules"],
+            "intentionally_unmapped_native_rules": contextual_manifest[
+                "intentionally_unmapped_native_rules"
+            ],
+            "catalog_revision": contextual_manifest["catalog_revision"],
+        },
         "live_source_of_truth": "AWS APIs through the selected provider",
         "persistent_inventory": False,
         "write_policy": (

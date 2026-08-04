@@ -79,7 +79,7 @@ class McpProcess:
                 "params": {
                     "protocolVersion": "2025-06-18",
                     "capabilities": {},
-                    "clientInfo": {"name": "bluearch-emulator-e2e", "version": "0.8.0b1"},
+                    "clientInfo": {"name": "bluearch-emulator-e2e", "version": "0.9.0b1"},
                 },
             }
         )["result"]
@@ -289,6 +289,216 @@ def main() -> int:
         )
         _expect(cost_signal["validation"]["status"] == "source_current", cost_signal)
 
+        vague_review = mcp.call(
+            "bluearch_assess",
+            {
+                "prompt": "Review the S3 bucket I am deploying.",
+                "assessment_mode": "architectural_review",
+                "review_context": {"operation": "create"},
+            },
+        )
+        _expect(vague_review["status"] == "input_required", vague_review)
+        _expect(vague_review["reason"] == "architectural_review_focus_required", vague_review)
+        _expect(vague_review["security"]["aws_calls"] is False, vague_review)
+
+        context_request = mcp.call(
+            "bluearch_assess",
+            {
+                "prompt": "Review s3://bluearch-steward-versioning-disabled before deletion.",
+                "assessment_mode": "architectural_review",
+                "review_context": {
+                    "operation": "delete",
+                    "resource_refs": [
+                        {
+                            "resource": "s3://bluearch-steward-versioning-disabled",
+                            "service": "s3",
+                        }
+                    ],
+                },
+            },
+        )
+        _expect(context_request["status"] == "input_required", context_request)
+        _expect(
+            context_request["reason"] == "architectural_review_context_required",
+            context_request,
+        )
+        _expect(len(context_request["questions"]) <= 5, context_request)
+
+        contextual_started_at = time.monotonic()
+        contextual_started = mcp.call(
+            "bluearch_assess",
+            {
+                "provider": "aws-sdk",
+                "endpoint_url": fixture_proxy.endpoint_url,
+                "region": arguments.region,
+                "prompt": "Review s3://bluearch-steward-versioning-disabled before deletion.",
+                "assessment_mode": "architectural_review",
+                "review_context": {
+                    "operation": "delete",
+                    "resource_refs": [
+                        {
+                            "resource": "s3://bluearch-steward-versioning-disabled",
+                            "service": "s3",
+                        }
+                    ],
+                    "answers": {
+                        "environment": "production",
+                        "data_classification": "confidential",
+                        "access_pattern": "private_application",
+                        "retention": "multi_year",
+                        "consumers": "multiple_workloads",
+                    },
+                    "max_relationship_hops": 1,
+                },
+                "max_returned_resources": 25,
+                "max_returned_findings": 25,
+            },
+        )
+        contextual_submit_ms = round((time.monotonic() - contextual_started_at) * 1000, 2)
+        _expect(contextual_submit_ms < 1000, contextual_started)
+        contextual_id = str(contextual_started["assessment_id"])
+        contextual_partial: Optional[Dict[str, Any]] = None
+        contextual_status: Dict[str, Any] = {}
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            contextual_results = mcp.call(
+                "bluearch_get_scan_results",
+                {
+                    "assessment_id": contextual_id,
+                    "include_partial": True,
+                    "generate_pdf_report": False,
+                },
+            )
+            contextual_partial = contextual_results.get("partial_result") or contextual_partial
+            contextual_status = mcp.call(
+                "bluearch_get_scan_status",
+                {"assessment_id": contextual_id},
+            )
+            if contextual_status.get("status") in {"completed", "failed", "cancelled"}:
+                break
+            time.sleep(0.05)
+        _expect(contextual_status.get("status") == "completed", contextual_status)
+        contextual_duration_ms = round((time.monotonic() - contextual_started_at) * 1000, 2)
+        _expect(contextual_duration_ms < 10_000, contextual_status)
+        _expect(contextual_partial is not None, contextual_status)
+
+        contextual_response = mcp.call(
+            "bluearch_get_scan_results",
+            {
+                "assessment_id": contextual_id,
+                "include_partial": True,
+                "generate_pdf_report": False,
+            },
+        )
+        contextual = contextual_response["result"]
+        contextual_summary = contextual["summary"]
+        _expect(contextual["assessment_mode"] == "architectural_review", contextual)
+        _expect(contextual_summary["full_account_scan"] is False, contextual_summary)
+        _expect(contextual_summary["services_requested"] == ["s3"], contextual_summary)
+        _expect(contextual_summary["services_scanned"] == ["s3"], contextual_summary)
+        _expect(contextual["evidence_ledger"]["operation_count"] <= 50, contextual)
+        _expect(contextual["evidence_ledger"]["write_operations"] == 0, contextual)
+        _expect(contextual["mcp"]["write_actions_applied"] is False, contextual["mcp"])
+        _expect("ec2" in contextual["excluded_scope"]["services"], contextual)
+        _expect("rds" in contextual["excluded_scope"]["services"], contextual)
+        _expect(
+            all(
+                "bluearch-steward-versioning-disabled" in str(item.get("resource") or "")
+                for item in contextual["recommendations"]
+            ),
+            contextual["recommendations"],
+        )
+        contextual_operations = contextual["evidence_ledger"]["operations"]
+        _expect(
+            not any(
+                str(item.get("operation") or "").startswith(("ec2.", "rds."))
+                for item in contextual_operations
+            ),
+            contextual_operations,
+        )
+        _expect(
+            all(
+                item.get("operation") and item.get("status") and item.get("observed_at")
+                for item in contextual_operations
+            ),
+            contextual_operations,
+        )
+        contextual_practices = [
+            practice
+            for pillar in contextual["well_architected_review"]["pillars"]
+            for practice in pillar["practices"]
+        ]
+        _expect(contextual_practices, contextual["well_architected_review"])
+        _expect(
+            all(
+                practice.get("source_url")
+                and practice.get("catalog_revision")
+                and practice.get("reviewed_at")
+                for practice in contextual_practices
+            ),
+            contextual_practices,
+        )
+        contextual_versioning = next(
+            item
+            for item in contextual["recommendations"]
+            if item["rule"] == "s3-versioning-disabled"
+        )
+        resource_details = mcp.call(
+            "bluearch_get_resource_details",
+            {
+                "assessment_id": contextual_id,
+                "resource": contextual_versioning["resource"],
+                "rule": "s3-versioning-disabled",
+            },
+        )
+        _expect(resource_details.get("architecture_neighborhood"), resource_details)
+        _expect(resource_details.get("well_architected_context"), resource_details)
+
+        contextual_investigation = mcp.call(
+            "bluearch_investigate_resource",
+            {
+                "assessment_id": contextual_id,
+                "finding_id": contextual_versioning["opportunity_id"],
+            },
+        )
+        _expect(contextual_investigation["read_only"] is True, contextual_investigation)
+        _expect(
+            contextual_investigation["write_actions_applied"] is False,
+            contextual_investigation,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            contextual_report_path = Path(directory) / "contextual-review.html"
+            contextual_export = mcp.call(
+                "bluearch_export_report",
+                {
+                    "assessment_id": contextual_id,
+                    "format": "html",
+                    "report_profile": "complete",
+                    "include_all_findings": True,
+                    "output_path": str(contextual_report_path),
+                },
+            )
+            _expect(contextual_report_path.exists(), contextual_export)
+            contextual_html = contextual_report_path.read_text(encoding="utf-8")
+            _expect("architectural_review" in contextual_html, contextual_html[:1000])
+
+        contextual_receipt = {
+            "assessment_id": contextual_id,
+            "focus": contextual["focus"],
+            "questions_verified": True,
+            "partial_results_verified": True,
+            "submit_ms": contextual_submit_ms,
+            "duration_ms": contextual_duration_ms,
+            "services_scanned": contextual_summary["services_scanned"],
+            "read_operations": contextual["evidence_ledger"]["operation_count"],
+            "write_operations": contextual["evidence_ledger"]["write_operations"],
+            "unrelated_collectors": [],
+            "resource_details_verified": True,
+            "investigation_verified": True,
+            "html_report_verified": True,
+        }
+
         investigation_targets = {
             "ec2-unattached-ebs-volume": "ec2:DeleteVolume",
             "ec2-unassociated-elastic-ip": "ec2:ReleaseAddress",
@@ -398,6 +608,7 @@ def main() -> int:
                     "complete_pdf_verified": True,
                     "unified_sources_verified": True,
                     "deduplicated_signals": summary["deduplicated_signals"],
+                    "contextual_review": contextual_receipt,
                     "deletion_investigations": investigation_receipts,
                     "operational_investigations": operational_receipts,
                     "plan_created": True,

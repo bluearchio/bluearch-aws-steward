@@ -16,6 +16,14 @@ BLUEARCH_STEWARD_LAMBDA_TRACING="${BLUEARCH_STEWARD_FIXTURE_PREFIX}-active-traci
 BLUEARCH_STEWARD_LOG_NO_RETENTION="${BLUEARCH_STEWARD_FIXTURE_PREFIX}-no-retention"
 BLUEARCH_STEWARD_LOG_RETENTION="${BLUEARCH_STEWARD_FIXTURE_PREFIX}-retention-30-days"
 BLUEARCH_STEWARD_TEST_PYTHON="${BLUEARCH_STEWARD_TEST_PYTHON:-python3}"
+# Callers pass a repository-relative interpreter such as .venv/bin/python, which
+# stops resolving inside subshells that cd elsewhere. Resolve it once, here, and
+# leave bare PATH lookups such as python3 untouched.
+if [ -x "$BLUEARCH_STEWARD_TEST_PYTHON" ]; then
+  BLUEARCH_STEWARD_TEST_PYTHON="$(
+    cd "$(dirname "$BLUEARCH_STEWARD_TEST_PYTHON")" && pwd
+  )/$(basename "$BLUEARCH_STEWARD_TEST_PYTHON")"
+fi
 BLUEARCH_STEWARD_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 AWS_CMD=(aws --endpoint-url "$EMULATOR_ENDPOINT" --region "$AWS_DEFAULT_REGION" --no-cli-pager)

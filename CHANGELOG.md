@@ -7,6 +7,38 @@ as preview are not covered by a stable API compatibility promise.
 
 ## [Unreleased]
 
+## [0.9.0b1] - Preview candidate
+
+### Added
+
+- Contextual Well-Architected reviews that focus on an explicit live resource,
+  proposed Terraform or CloudFormation resource, or user-selected service
+  instead of scanning the whole account by default.
+- Five versioned knowledge-pack families covering all 17 executable runtime
+  scopes, with validated mappings between native rules and applicable
+  Well-Architected practices.
+- A bounded architecture-neighborhood graph with typed relationships,
+  provenance, confidence, timestamps, explicit unknowns, a 25-node limit, and
+  a 50-operation read budget.
+- Safe Terraform HCL, Terraform plan JSON, and CloudFormation JSON/YAML parsing
+  with workspace confinement, sensitive-file rejection, unresolved-expression
+  handling, and no source modification.
+- Contextual focus, questions, WAF ledger, excluded scope, read ledger,
+  recommendations, and limitations in JSON, CSV, Markdown, HTML, SARIF, and PDF
+  reports.
+- Golden contextual scenarios and a real stdio MCP LocalEmu gate that prove
+  focused collection, no unrelated service reads, complete provenance, and
+  zero writes.
+
+### Changed
+
+- Full-account assessment now requires explicit full-scan intent; ambiguous
+  prompts return guided focus choices instead of guessing a resource.
+- Assessment objectives influence recommendation ranking but do not suppress a
+  confirmed high-impact concern from another Well-Architected pillar.
+- Resource details now include the captured architecture neighborhood and
+  contextual Well-Architected practices.
+
 ## [0.8.0b1] - Preview candidate
 
 ### Added

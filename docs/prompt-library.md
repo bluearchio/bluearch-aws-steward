@@ -21,7 +21,7 @@ bluearch-steward mcp prompts
 bluearch-steward mcp prompts --output json
 ```
 
-The built-ins are `readiness_and_coverage`, `comprehensive_assessment`,
+The built-ins are `readiness_and_coverage`, `contextual_architecture_review`, `comprehensive_assessment`,
 `cost_optimization`, `security_review`, `catalog_search`, `remediation_plan`,
 and `pdf_assessment_report`. MCP hosts may expose these as commands, menus, or
 a prompt picker. Natural-language prompts below remain valid in every client.
@@ -30,6 +30,55 @@ The built-in templates are read-only or plan-only. Applying a change always
 requires a separate explicit approval of the exact server-issued plan.
 
 ## Best Prompt Shape
+
+The default product flow is one resource or proposed change, not an account
+scan. Include:
+
+- Focus: exact ARN, Steward resource URI, Terraform address, or CloudFormation logical ID.
+- Operation: create, update, review, delete, troubleshoot, or optimize.
+- Intent: what you are trying to accomplish and which tradeoff matters most.
+- IaC context: an explicit workspace root and up to 20 paths when reviewing source.
+
+Steward asks only the applicability questions needed for that resource. It does
+not guess between resources and does not broaden the request into a full scan.
+
+## Contextual Live Resource Review
+
+> Review `s3://my-application-data` before I change its lifecycle policy. Apply
+> every relevant Well-Architected pillar, inspect only observed one-hop
+> dependencies, identify missing context, and explain business impact, safe
+> correction, and verification. Do not broaden this into an account scan.
+
+## Contextual Delete Review
+
+> Investigate whether `arn:aws:rds:us-east-1:123456789012:db:orders` can be
+> deleted safely. Show observed consumers, network and recovery dependencies,
+> evidence provenance, unknowns, confidence, blast radius, rollback, and every
+> human confirmation still required. Never interpret an unobserved dependency
+> as proof that none exists.
+
+## Proposed Terraform Review
+
+> Review the proposed resource in `infra/storage.tf` under this repository root
+> before deployment. Ask about data classification, access pattern, retention,
+> recovery, consumers, and expected growth only when those facts change the
+> applicable practices. Do not run Terraform or modify the file.
+
+## Proposed CloudFormation Review
+
+> Review `StorageBucket` in `template.yaml` as a proposed production resource.
+> Correlate references declared in the template, preserve unresolved intrinsic
+> functions as unknown, and show WAF risks, aligned controls, required input,
+> business impact, and verification steps. Do not execute transforms or deploy.
+
+## Troubleshoot One Runtime Node
+
+> Troubleshoot the selected Lambda function and inspect only its execution role,
+> event sources, network placement, logging, and observed downstream context.
+> Separate symptoms, evidence, hypotheses, and confirmed conclusions. Do not
+> scan unrelated services.
+
+## Explicit Full-Account Prompt Shape
 
 Include these details when they matter:
 
@@ -235,8 +284,10 @@ tokens into the payload.
 
 ## Avoid Ambiguous Requests
 
-Avoid prompts such as `scan everything` or `fix my AWS`. They omit the account,
-region, objective, output size, and write policy. Also distinguish between:
+Avoid prompts such as `fix my AWS`. For contextual reviews, `review my bucket`
+is also incomplete unless there is only one exact focus candidate; Steward will
+ask instead of guessing. `Scan everything` is accepted only as explicit
+full-assessment intent. Also distinguish between:
 
 - Complete catalog search: knowledge across all 649 rules.
 - Live AWS assessment: pass/fail evaluation for the currently automated rules.

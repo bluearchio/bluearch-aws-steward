@@ -66,8 +66,17 @@ package-install-smoke: package
 	/tmp/bluearch-steward-uv-bin/bluearch-steward mcp install --client cursor --runtime installed --dry-run >/dev/null
 	UV_TOOL_DIR=/tmp/bluearch-steward-uv-tools UV_TOOL_BIN_DIR=/tmp/bluearch-steward-uv-bin $(UV) tool uninstall bluearch-aws-steward
 
+.PHONY: knowledge-check
+knowledge-check:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -c 'from bluearch_aws_steward.knowledge_packs import validate_knowledge_packs; manifest = validate_knowledge_packs(); print("validated_contextual_scopes=" + str(manifest["runtime_scope_count"])); print("validated_native_rules=" + str(manifest["native_rule_count"]))'
+
+.PHONY: contextual-benchmark
+contextual-benchmark:
+	mkdir -p tests/contextual/.artifacts
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) tests/contextual/run_benchmark.py --output tests/contextual/.artifacts/benchmark.json >/dev/null
+
 .PHONY: test
-test: test-mcp
+test: test-mcp knowledge-check contextual-benchmark
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests -p 'test_*.py'
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m bluearch_aws_steward.iam_policies --check
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m bluearch_aws_steward --version
