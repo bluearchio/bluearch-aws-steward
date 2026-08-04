@@ -1,0 +1,55 @@
+{
+  "schema_version": "contextual-benchmark-0.1",
+  "scenarios": [
+    {
+      "id": "account-foundation-iam",
+      "family": "account_foundation",
+      "service": "iam",
+      "operation": "create",
+      "prompt": "Review the IAM policy I am creating for an application role.",
+      "terraform": "resource \"aws_iam_policy\" \"application\" {\n  name = \"contextual-application\"\n  policy = jsonencode({ Version = \"2012-10-17\", Statement = [{ Effect = \"Allow\", Action = \"*\", Resource = \"*\" }] })\n}\n",
+      "expected_rule": "iam-policy-full-admin",
+      "expected_practice": "SEC03-BP02"
+    },
+    {
+      "id": "storage-protection-s3",
+      "family": "storage_and_protection",
+      "service": "s3",
+      "operation": "create",
+      "prompt": "Review the S3 bucket versioning configuration I am deploying.",
+      "terraform": "resource \"aws_s3_bucket_versioning\" \"data\" {\n  bucket = \"contextual-data\"\n  versioning_configuration { status = \"Suspended\" }\n}\n",
+      "expected_rule": "s3-versioning-disabled",
+      "expected_practice": "REL09-BP01"
+    },
+    {
+      "id": "compute-runtime-lambda",
+      "family": "compute_and_runtime",
+      "service": "lambda",
+      "operation": "create",
+      "prompt": "Review the Lambda function I am deploying.",
+      "terraform": "resource \"aws_lambda_function\" \"api\" {\n  function_name = \"contextual-api\"\n  role = \"arn:aws:iam::000000000000:role/contextual\"\n  handler = \"index.handler\"\n  runtime = \"python3.13\"\n}\n",
+      "expected_rule": "lambda-xray-tracing-disabled",
+      "expected_practice": "OPS04-BP02"
+    },
+    {
+      "id": "data-platform-rds",
+      "family": "data_platforms",
+      "service": "rds",
+      "operation": "update",
+      "prompt": "Review the RDS database configuration before production deployment.",
+      "terraform": "resource \"aws_db_instance\" \"primary\" {\n  identifier = \"contextual-primary\"\n  engine = \"postgres\"\n  instance_class = \"db.t4g.micro\"\n  allocated_storage = 20\n  multi_az = false\n}\n",
+      "expected_rule": "rds-multi-az-disabled",
+      "expected_practice": "REL09-BP01"
+    },
+    {
+      "id": "edge-integration-api-gateway",
+      "family": "edge_and_integration",
+      "service": "api-gateway",
+      "operation": "create",
+      "prompt": "Review the API Gateway stage I am deploying.",
+      "terraform": "resource \"aws_api_gateway_stage\" \"production\" {\n  stage_name = \"production\"\n  rest_api_id = \"contextual-api\"\n  deployment_id = \"contextual-deployment\"\n  xray_tracing_enabled = false\n}\n",
+      "expected_rule": "api-gateway-xray-tracing-disabled",
+      "expected_practice": "OPS04-BP02"
+    }
+  ]
+}

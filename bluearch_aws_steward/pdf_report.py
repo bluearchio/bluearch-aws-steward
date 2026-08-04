@@ -78,6 +78,8 @@ def render_pdf_report(model: JSON) -> bytes:
     report_profile = str(model.get("report_profile") or "technical")
 
     story.extend(_cover(model, summary, styles))
+    if model.get("assessment_mode") == "architectural_review":
+        story.extend(_contextual_review(model, styles))
     story.extend(_risk_overview(summary, styles))
     story.extend(_coverage(summary, styles))
     if report_profile == "executive":
@@ -302,6 +304,171 @@ def _risk_overview(summary: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any
         Spacer(1, 3 * mm),
         _bar_chart("Findings by service", by_service[:15]),
     ]
+
+
+def _contextual_review(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
+    focus = (model.get("focus") or {}).get("resources") or []
+    selected_knowledge = (model.get("focus") or {}).get("selected_knowledge") or []
+    graph = model.get("architecture_neighborhood") or {}
+    review = model.get("well_architected_review") or {}
+    ledger = model.get("evidence_ledger") or {}
+    excluded = model.get("excluded_scope") or {}
+    unknowns = (model.get("context_questions") or {}).get("unknown_facts") or []
+    elements: List[Any] = [
+        Paragraph("Contextual architecture review", styles["heading"]),
+        _labelled(
+            "Assessment mode",
+            model.get("assessment_mode") or "architectural_review",
+            styles["body"],
+        ),
+        _labelled("Operation", model.get("operation") or "review", styles["body"]),
+    ]
+    for resource in focus:
+        elements.append(
+            _labelled(
+                "Focus",
+                f"{resource.get('arn') or resource.get('resource_id') or 'unknown'} "
+                f"({resource.get('service') or 'unknown'})",
+                styles["body"],
+            )
+        )
+    elements.extend(
+        [
+            _labelled(
+                "Observed neighborhood",
+                f"{len(graph.get('nodes') or [])} nodes, {len(graph.get('edges') or [])} relationships",
+                styles["body"],
+            ),
+            _labelled(
+                "Read ledger",
+                f"{ledger.get('operation_count', 0)} of {ledger.get('operation_budget', 0)} operations",
+                styles["body"],
+            ),
+            _labelled(
+                "Selected knowledge",
+                ", ".join(str(item.get("service")) for item in selected_knowledge) or "none",
+                styles["body"],
+            ),
+            _labelled(
+                "Excluded services",
+                ", ".join(str(item) for item in excluded.get("services") or []) or "none",
+                styles["body"],
+            ),
+            _labelled(
+                "Unknown context",
+                ", ".join(str(item) for item in unknowns) or "none",
+                styles["body"],
+            ),
+            Paragraph(
+                "An unobserved relationship is not proof that no dependency exists.",
+                styles["small"],
+            ),
+            Spacer(1, 2 * mm),
+        ]
+    )
+    rows = [["Pillar", "Risk", "Aligned", "Needs input", "Unknown", "Not evaluated"]]
+    for pillar in review.get("pillars") or []:
+        counts = pillar.get("status_counts") or {}
+        rows.append(
+            [
+                str(pillar.get("pillar") or "unknown").replace("_", " ").title(),
+                counts.get("risk", 0),
+                counts.get("aligned", 0),
+                counts.get("requires_input", 0),
+                counts.get("unknown", 0),
+                counts.get("not_evaluated", 0),
+            ]
+        )
+    table = Table(rows, colWidths=[45 * mm, 18 * mm, 20 * mm, 25 * mm, 20 * mm, 27 * mm])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), PALE),
+                ("BOX", (0, 0), (-1, -1), 0.6, BORDER),
+                ("INNERGRID", (0, 0), (-1, -1), 0.3, BORDER),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 7),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    elements.extend([table, Spacer(1, 3 * mm)])
+
+    practice_rows: List[List[Any]] = [
+        [
+            Paragraph("Practice", styles["table_header"]),
+            Paragraph("Pillar", styles["table_header"]),
+            Paragraph("Status", styles["table_header"]),
+            Paragraph("Evidence", styles["table_header"]),
+        ]
+    ]
+    for pillar in review.get("pillars") or []:
+        for practice in pillar.get("practices") or []:
+            practice_rows.append(
+                [
+                    Paragraph(
+                        f"<b>{_safe(practice.get('practice_id') or 'unknown')}</b><br/>"
+                        f"{_safe(_short(practice.get('title') or '', 55))}",
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        _safe(str(pillar.get("pillar") or "unknown").replace("_", " ").title()),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(_safe(practice.get("status") or "unknown"), styles["table_cell"]),
+                    Paragraph(
+                        _safe(
+                            ", ".join(practice.get("matched_native_rules") or [])
+                            or "Manual or unavailable evidence"
+                        ),
+                        styles["table_cell"],
+                    ),
+                ]
+            )
+    if len(practice_rows) > 1:
+        practice_table = LongTable(
+            practice_rows,
+            colWidths=[62 * mm, 34 * mm, 23 * mm, 56 * mm],
+            repeatRows=1,
+        )
+        practice_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), BLUE),
+                    ("BOX", (0, 0), (-1, -1), 0.5, BORDER),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, BORDER),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        elements.extend(
+            [
+                Paragraph("Well-Architected practice ledger", styles["subheading"]),
+                practice_table,
+                Spacer(1, 3 * mm),
+            ]
+        )
+    concerns = model.get("hidden_relevant_concerns") or []
+    if concerns:
+        elements.append(Paragraph("High-impact cross-pillar concerns", styles["subheading"]))
+        for concern in concerns:
+            elements.append(
+                Paragraph(
+                    f"<b>{_safe(concern.get('severity') or 'unknown')}</b> "
+                    f"{_safe(concern.get('rule') or 'unknown')} on "
+                    f"{_safe(concern.get('resource') or 'unknown')}",
+                    styles["body"],
+                )
+            )
+    return elements
 
 
 def _bar_chart(
@@ -546,6 +713,8 @@ def _labelled(label: str, value: Any, style: ParagraphStyle) -> Paragraph:
 def _limitations(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
     elements: List[Any] = [Paragraph("Limitations", styles["heading"])]
     for limitation in model.get("limitations") or []:
+        if isinstance(limitation, dict):
+            limitation = limitation.get("message") or limitation.get("detail") or limitation
         elements.append(Paragraph(f"- {_safe(limitation)}", styles["body"]))
     return elements
 

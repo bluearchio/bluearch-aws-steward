@@ -1039,6 +1039,8 @@ class ExtendedFixtures:
 
         certificate_path = self.artifact_dir / "fixture-cert.pem"
         private_key_path = self.artifact_dir / "fixture-cert-key.pem"
+        certificate_path.unlink(missing_ok=True)
+        private_key_path.unlink(missing_ok=True)
         subprocess.run(
             [
                 "openssl",

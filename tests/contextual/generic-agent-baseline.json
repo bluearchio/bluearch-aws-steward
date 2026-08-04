@@ -1,0 +1,44 @@
+{
+  "schema_version": "generic-reference-0.1",
+  "reference_type": "deterministic_instruction_only_fixture",
+  "model_measurement": false,
+  "recorded_at": "2026-08-03",
+  "purpose": "A stable comparison shape for the benchmark harness. It is not presented as performance data for any named model.",
+  "known_limitations": [
+    "No live environment evidence or operation ledger.",
+    "No deterministic applicability evaluation.",
+    "No guarantee that unrelated advice is excluded."
+  ],
+  "scenarios": [
+    {
+      "id": "account-foundation-iam",
+      "applicable_practices_found": [],
+      "recommendation_services": ["iam", "cloudtrail"],
+      "unsupported_claims": 1
+    },
+    {
+      "id": "storage-protection-s3",
+      "applicable_practices_found": [],
+      "recommendation_services": ["s3", "ec2"],
+      "unsupported_claims": 1
+    },
+    {
+      "id": "compute-runtime-lambda",
+      "applicable_practices_found": [],
+      "recommendation_services": ["lambda", "ecs"],
+      "unsupported_claims": 1
+    },
+    {
+      "id": "data-platform-rds",
+      "applicable_practices_found": [],
+      "recommendation_services": ["rds", "s3"],
+      "unsupported_claims": 1
+    },
+    {
+      "id": "edge-integration-api-gateway",
+      "applicable_practices_found": [],
+      "recommendation_services": ["api-gateway", "alb"],
+      "unsupported_claims": 1
+    }
+  ]
+}

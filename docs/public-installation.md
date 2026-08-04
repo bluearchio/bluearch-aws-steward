@@ -73,10 +73,10 @@ An MCP client can resolve and cache an exact published version on demand:
 bluearch-steward mcp config --runtime uvx
 ```
 
-For `0.8.0b1`, the generated server command is equivalent to:
+For `0.9.0b1`, the generated server command is equivalent to:
 
 ```bash
-uvx --from bluearch-aws-steward==0.8.0b1 bluearch-steward-mcp
+uvx --from bluearch-aws-steward==0.9.0b1 bluearch-steward-mcp
 ```
 
 Persistent `pip` or `uv tool` installation remains the default because startup
@@ -167,5 +167,6 @@ Kubernetes client and runs the Steward version and MCP smoke commands. Release
 workflows additionally validate an isolated `uv tool` and version-pinned `uvx`
 configuration before guarded TestPyPI and PyPI publication.
 
-The complete EKS-inclusive package contract starts with `0.8.0b1`. Until that
-candidate is published, PyPI continues to serve the previous preview.
+The standard package includes contextual knowledge packs, Terraform and
+CloudFormation parsing, reports, native AWS rules, and EKS/Kubernetes support.
+There is no separate feature extra to install.

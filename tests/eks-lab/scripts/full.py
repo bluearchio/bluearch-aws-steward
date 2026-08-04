@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_DIR = Path(__file__).resolve().parent
-if str(ROOT) not in sys.path:
+USE_INSTALLED_PACKAGE = os.environ.get("BLUEARCH_STEWARD_USE_INSTALLED_PACKAGE") == "1"
+if not USE_INSTALLED_PACKAGE and str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))

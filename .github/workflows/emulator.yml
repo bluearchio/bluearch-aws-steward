@@ -6,6 +6,7 @@ on:
     paths:
       - "bluearch_aws_steward/**"
       - "tests/aws-emulator/**"
+      - "tests/contextual/**"
       - "tests/mcp/**"
       - "Makefile"
       - "pyproject.toml"

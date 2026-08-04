@@ -337,6 +337,7 @@ class McpPromptTests(unittest.TestCase):
             set(prompts),
             {
                 "readiness_and_coverage",
+                "contextual_architecture_review",
                 "comprehensive_assessment",
                 "cost_optimization",
                 "security_review",
@@ -471,7 +472,7 @@ class McpFirstWorkflowTests(unittest.TestCase):
         config = mcp_client_config(
             runtime="uvx",
             uvx_executable="/usr/local/bin/uvx",
-            package_version="0.8.0b1",
+            package_version="0.9.0b1",
         )["mcpServers"]["bluearch-aws-steward"]
 
         self.assertEqual(config["command"], "/usr/local/bin/uvx")
@@ -479,7 +480,7 @@ class McpFirstWorkflowTests(unittest.TestCase):
             config["args"],
             [
                 "--from",
-                "bluearch-aws-steward==0.8.0b1",
+                "bluearch-aws-steward==0.9.0b1",
                 "bluearch-steward-mcp",
             ],
         )

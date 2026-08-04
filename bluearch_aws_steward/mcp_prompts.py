@@ -12,17 +12,36 @@ SUPPORTED_OBJECTIVES = (
     "security",
     "reliability",
     "operations",
+    "performance_efficiency",
     "all",
 )
 SUPPORTED_SERVICES = (
     "all",
-    "s3",
-    "cloudwatch",
-    "ec2",
     "iam",
     "cloudtrail",
+    "cloudwatch",
+    "dynamodb",
+    "s3",
+    "ec2",
     "rds",
     "lambda",
+    "efs",
+    "eks",
+    "ecs",
+    "alb",
+    "kms",
+    "secrets-manager",
+    "sns",
+    "sqs",
+    "api-gateway",
+)
+SUPPORTED_REVIEW_OPERATIONS = (
+    "create",
+    "update",
+    "review",
+    "delete",
+    "troubleshoot",
+    "optimize",
 )
 _REGION_PATTERN = re.compile(r"^[a-z]{2}(?:-gov)?-[a-z0-9-]+-[0-9]+$")
 
@@ -111,6 +130,34 @@ def _assessment_prompt(arguments: Mapping[str, str]) -> str:
     )
 
 
+def _architectural_review_prompt(arguments: Mapping[str, str]) -> str:
+    profile_region = _profile_region_instruction(arguments)
+    resource = arguments.get("resource")
+    operation = arguments.get("operation", "review")
+    workspace_root = arguments.get("workspace_root")
+    iac_path = arguments.get("iac_path")
+    focus_instruction = (
+        f"Use exact focus resource {_quoted(resource)}. "
+        if resource
+        else "Ask me to select one exact resource; never guess among resources. "
+    )
+    iac_instruction = (
+        f"Review IaC path {_quoted(iac_path)} under workspace root {_quoted(workspace_root)}. "
+        if workspace_root and iac_path
+        else ""
+    )
+    return (
+        "Perform a contextual Well-Architected review with BlueArch AWS Steward by calling "
+        "bluearch_assess with assessment_mode architectural_review. "
+        f"{profile_region} Use operation {_quoted(operation)}. {focus_instruction}{iac_instruction}"
+        "Ask only the returned applicability questions, preserve skipped answers as unknown, and do "
+        "not broaden this into a service-wide or full-account scan. Report the focus, selected knowledge "
+        "pack, observed typed relationships, excluded scope, practice statuses, evidence provenance, "
+        "business impact, safe correction, verification, missing context, and high-impact cross-pillar "
+        "concerns. Do not modify IaC or AWS."
+    )
+
+
 def _cost_prompt(arguments: Mapping[str, str]) -> str:
     profile_region = _profile_region_instruction(arguments)
     service = arguments.get("service", "all")
@@ -185,6 +232,44 @@ _PROMPTS: Tuple[JSON, ...] = (
         "Readiness and coverage",
         "Inspect Steward, AWS context, and catalog coverage without starting a scan.",
         _readiness_prompt,
+    ),
+    _prompt(
+        "contextual_architecture_review",
+        "Contextual architecture review",
+        "Review one existing or proposed AWS resource and its bounded architecture neighborhood.",
+        _architectural_review_prompt,
+        (
+            _argument(
+                "resource",
+                "Focus resource",
+                "Exact AWS ARN, resource URI, identifier, or proposed resource address.",
+            ),
+            _argument(
+                "operation",
+                "Review operation",
+                "create, update, review, delete, troubleshoot, or optimize. Defaults to review.",
+            ),
+            _argument(
+                "workspace_root",
+                "IaC workspace root",
+                "Declared local workspace root when reviewing Terraform or CloudFormation.",
+            ),
+            _argument(
+                "iac_path",
+                "IaC path",
+                "Explicit Terraform or CloudFormation file under workspace_root.",
+            ),
+            _argument(
+                "profile",
+                "AWS profile",
+                "AWS shared-config profile to use. Omit it to have Steward ask the user.",
+            ),
+            _argument(
+                "region",
+                "AWS region",
+                "AWS region to review. Omit it to have Steward ask the user.",
+            ),
+        ),
     ),
     _prompt(
         "comprehensive_assessment",
@@ -359,6 +444,10 @@ def _validate_argument_value(name: str, value: str) -> str:
         raise McpPromptError(
             f"Prompt argument 'service' must be one of: {', '.join(SUPPORTED_SERVICES)}."
         )
+    if name == "operation" and value not in SUPPORTED_REVIEW_OPERATIONS:
+        raise McpPromptError(
+            f"Prompt argument 'operation' must be one of: {', '.join(SUPPORTED_REVIEW_OPERATIONS)}."
+        )
     if name == "region" and not _REGION_PATTERN.fullmatch(value):
         raise McpPromptError("Prompt argument 'region' is not a valid AWS region name.")
     if name == "max_results":
@@ -373,7 +462,13 @@ def _validate_argument_value(name: str, value: str) -> str:
     if name == "output_path" and not value.lower().endswith(".pdf"):
         raise McpPromptError("Prompt argument 'output_path' must end in .pdf.")
 
-    maximum = 1024 if name == "output_path" else 512 if name == "finding_reference" else 200
+    maximum = (
+        1024
+        if name in {"output_path", "workspace_root", "iac_path"}
+        else 512
+        if name in {"finding_reference", "resource"}
+        else 200
+    )
     if len(value) > maximum:
         raise McpPromptError(f"Prompt argument '{name}' exceeds the {maximum}-character limit.")
     return value

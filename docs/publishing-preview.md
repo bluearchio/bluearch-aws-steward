@@ -65,15 +65,15 @@ Run the manual `Release candidate validation` workflow on the same commit. Do
 not create the release tag until CI, CodeQL, LocalEmu MCP E2E, and the release
 candidate workflow are green.
 
-## Publish `0.8.0b1`
+## Publish `0.9.0b1`
 
 Create an annotated tag from the validated `main` commit. Preview tags may be
 unsigned because publishing is bound to this repository and workflow through
 OIDC. Require a verified signed tag before publishing a stable release:
 
 ```bash
-git tag -a v0.8.0b1 -m "BlueArch AWS Steward 0.8.0b1"
-git push origin v0.8.0b1
+git tag -a v0.9.0b1 -m "BlueArch AWS Steward 0.9.0b1"
+git push origin v0.9.0b1
 ```
 
 The workflow will:
@@ -95,14 +95,14 @@ Use a machine or container without the repository checkout:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install 'bluearch-aws-steward==0.8.0b1'
+python -m pip install 'bluearch-aws-steward==0.9.0b1'
 bluearch-steward --version
 bluearch-steward mcp smoke
 python -c "import kubernetes"
 bluearch-steward mcp install --client cursor --runtime installed --dry-run
 deactivate
 
-uv tool install 'bluearch-aws-steward==0.8.0b1'
+uv tool install 'bluearch-aws-steward==0.9.0b1'
 bluearch-steward mcp smoke
 uv tool uninstall bluearch-aws-steward
 ```

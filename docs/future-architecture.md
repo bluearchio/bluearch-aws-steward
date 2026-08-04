@@ -67,22 +67,26 @@ flowchart LR
 
 ### Prompt To Solution Cards
 
-`bluearch_assess` is the natural-language entrypoint. It starts a bounded
-background job and returns immediately. The existing deterministic
-`bluearch_advise` implementation runs inside that job and remains available as
-a synchronous compatibility tool.
+`bluearch_assess` is the natural-language entrypoint. Its default
+`architectural_review` mode resolves one live or proposed resource, selects a
+validated knowledge pack, and inspects only the bounded dependency neighborhood
+needed for that decision. Explicit full-account intent continues to start the
+broader background assessment. The existing deterministic `bluearch_advise`
+implementation remains available as a synchronous compatibility tool.
 
 ```text
 Prompt
-  -> infer explicit objective and supported service scope
-  -> return guided possible responses for any missing intent
+  -> resolve an explicit resource, changed IaC resource, identifier, or service
+  -> return guided possible responses instead of guessing ambiguous focus
+  -> ask only applicability-critical context questions
   -> resolve profile, region, and authentication with the user
   -> create ephemeral assessment ID
-  -> select matching rules
-  -> scan live AWS or consume a supplied scan_result
+  -> select a versioned resource and operation knowledge pack
+  -> collect the primary node and bounded typed relationships
+  -> scan targeted live AWS, parse supplied IaC, or consume a scan_result
   -> normalize findings
-  -> group findings by rule and objective
-  -> store point-in-time solution cards for 15 minutes
+  -> evaluate applicable Well-Architected practices and native rules
+  -> store the point-in-time review for 15 minutes
   -> return results through the assessment ID
 ```
 

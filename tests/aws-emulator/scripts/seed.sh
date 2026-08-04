@@ -253,9 +253,10 @@ FIXTURE_DIR="$(cd "$SCRIPT_DIR/../fixtures" && pwd)"
 ARTIFACT_DIR="$SCRIPT_DIR/../.artifacts"
 mkdir -p "$ARTIFACT_DIR"
 LAMBDA_ZIP="$(cd "$ARTIFACT_DIR" && pwd)/lambda-fixture.zip"
+rm -f "$LAMBDA_ZIP"
 (
   cd "$FIXTURE_DIR"
-  python3 -m zipfile -c "$LAMBDA_ZIP" lambda_function.py
+  "$BLUEARCH_STEWARD_TEST_PYTHON" -m zipfile -c "$LAMBDA_ZIP" lambda_function.py
 )
 
 "${AWS_CMD[@]}" lambda create-function \

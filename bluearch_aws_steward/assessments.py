@@ -318,6 +318,7 @@ class AssessmentStore:
             "service",
             "services",
             "assessment_mode",
+            "review_context",
             "result_preferences",
             "provider",
             "profile",

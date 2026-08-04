@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "bluearch-aws-steward"
 dynamic = ["version"]
-description = "Agent-native AWS misconfiguration detection and remediation powered by BlueArch rules."
+description = "Contextual, MCP-native AWS Well-Architected reviews and safe remediation planning."
 readme = "PYPI_README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -13,6 +13,7 @@ authors = [{ name = "BlueArch", email = "support@bluearch.io" }]
 dependencies = [
     "boto3>=1.34,<2.0",
     "kubernetes>=36.0.3,<37",
+    "python-hcl2>=7.3,<8",
     "pyyaml>=6.0.3,<7",
     "reportlab>=4.2,<5.0",
     "urllib3>=2.7,<3.0",
@@ -63,7 +64,7 @@ version = { attr = "bluearch_aws_steward.__version__" }
 include = ["bluearch_aws_steward", "bluearch_aws_steward.*"]
 
 [tool.setuptools.package-data]
-bluearch_aws_steward = ["catalog/*.json"]
+bluearch_aws_steward = ["catalog/*.json", "knowledge/*.json"]
 
 [tool.ruff]
 target-version = "py39"

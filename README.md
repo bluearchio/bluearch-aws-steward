@@ -1,22 +1,30 @@
 # BlueArch AWS Steward
 
-**BlueArch AWS Steward Beta: an MCP-first, read-only AWS recommendation and
-remediation planning engine.**
+**BlueArch AWS Steward Beta: an MCP-first, contextual AWS architecture
+reviewer.**
 
-BlueArch AWS Steward is a local, MCP-first AWS assessment and guarded
-remediation engine. It evaluates live AWS configuration against the BlueArch
-misconfiguration catalog, returns only resources caught by executable rules,
-builds evidence-backed remediation plans, and verifies approved changes.
+BlueArch AWS Steward reviews one live resource or proposed infrastructure
+change and the dependencies that matter to that decision. It applies validated
+AWS Well-Architected knowledge, evaluates live AWS and declared Terraform or
+CloudFormation, explains business impact, and builds evidence-backed correction
+plans. Full-account scanning remains available only when explicitly requested.
 
 Steward is standalone. It does not use BlueArch Core, hosted login, hosted
 telemetry, or a local AWS inventory database. AWS remains the source of truth.
 
 ## What It Provides
 
+- Contextual architecture reviews for one to five focus resources, with typed
+  relationships, explicit unknowns, excluded scope, and a complete read ledger.
+- Validated Well-Architected knowledge packs for all 17 executable scopes,
+  backed by the bundled `aws-misconfig-db` catalog.
 - 120 native rules across 17 runtime scopes, including a 20-rule EKS/Kubernetes pack.
 - Searchable knowledge for all 649 `aws-misconfig-db` catalog entries.
+- Safe Terraform HCL, Terraform plan JSON, and CloudFormation JSON/YAML review
+  without executing plans, transforms, macros, custom resources, or dynamic references.
 - Point-in-time, read-only assessments using user-owned AWS credentials.
-- MCP-native clarification for objective, service, profile, and Region.
+- MCP-native clarification for focus, architecture context, objective, service,
+  profile, and Region.
 - Guided, focused, and full-report assessment modes with multi-objective and
   multi-service selection.
 - Background assessments with status, partial results, and cancellation.
@@ -88,9 +96,9 @@ a version-pinned `uvx` configuration:
 bluearch-steward mcp config --runtime uvx
 ```
 
-Published packages are available from PyPI. The complete EKS-inclusive package
-contract starts with `0.8.0b1`; until that candidate is published, PyPI still
-serves the previous preview. To test the current checkout or contribute:
+Published packages are available from PyPI. The standard wheel includes the
+MCP server, reports, contextual knowledge packs, IaC parsers, native rules, and
+EKS/Kubernetes support. To test the current checkout or contribute:
 
 ```bash
 git clone https://github.com/bluearchio/bluearch-aws-steward.git
@@ -141,7 +149,7 @@ Do not put credentials, SSO tokens, a default profile, or a default Region in
 the MCP configuration. Steward uses the AWS SDK credential chain and asks the
 user when multiple contexts are possible.
 
-## First Assessment
+## First Contextual Review
 
 1. Configure AWS credentials outside the conversation. AWS SSO users can run:
 
@@ -150,24 +158,41 @@ user when multiple contexts are possible.
    ```
 
 2. Restart or reconnect the MCP client.
-3. Ask:
+3. Review one existing resource by exact ARN or resource URI:
 
-   > Assess my AWS environment comprehensively. Ask me to select the AWS
-   > profile and Region. Show only resources caught by native rules, report
-   > skipped rules and coverage.
+   > Review `s3://my-application-data` before I change its lifecycle policy.
+   > Ask only for context that changes which Well-Architected practices apply.
+
+   Or review a proposed change by giving the agent an explicit workspace root
+   and Terraform or CloudFormation path:
+
+   > Review the S3 resource proposed in `infra/storage.tf`. Consider its access
+   > pattern, consumers, retention, recovery, and expected growth. Do not modify
+   > the file or AWS.
 
 Steward returns an assessment ID immediately. The client polls status, may read
-partial results, and retrieves concise solution cards without starting the scan
-again. Every finding remains queryable and exportable from process memory for
-15 minutes. A 50,000-finding guard reports `incomplete=true` and an exact reason
-instead of silently truncating a complete assessment.
+partial results, and retrieves a focused architecture neighborhood, WAF practice
+ledger, contextual recommendations, unknowns, and excluded scope without
+starting the review again. Context exists only in process memory for 15 minutes.
+
+If the request does not identify one resource or proposed change, Steward asks
+the user to select one rather than guessing. A full account assessment is a
+separate explicit choice:
+
+> Run a comprehensive assessment across all supported services. Show only
+> resources caught by rules and report skipped rules and coverage.
+
+Full assessments preserve every finding for querying and reporting. A
+50,000-finding guard reports `incomplete=true` and an exact reason instead of
+silently truncating a complete assessment.
 
 Read-only assessment, finding evidence and risk, cost estimate status and
 confidence, individual-plan approval, and the terminal PDF choice are product
 defaults; users do not need to request them in the prompt.
 
-See [`docs/prompt-library.md`](docs/prompt-library.md) for focused cost,
-security, reliability, catalog, planning, and verification prompts.
+See [`docs/contextual-architecture-reviews.md`](docs/contextual-architecture-reviews.md)
+for the review contract and [`docs/prompt-library.md`](docs/prompt-library.md)
+for contextual, full-assessment, planning, and verification prompts.
 
 ### Unified Recommendation Queue
 
@@ -236,9 +261,10 @@ user flow is MCP.
 
 ## Detection Coverage
 
-`bluearch_get_coverage` reports:
+`bluearch_get_coverage` and the package-build knowledge validator generate the
+authoritative counts. The current source manifest reports:
 
-| Measure | v0.8.0b1 candidate |
+| Measure | Current candidate |
 | --- | ---: |
 | Catalog rules | 649 |
 | Native canonical rules | 120 |
@@ -267,7 +293,7 @@ rule list and evidence type.
 
 ## Release Status
 
-The current `0.8.0b1` work is a release candidate, not a published stable release.
+The current `0.9.0b1` work is a preview candidate, not a stable release.
 Public-preview and stable-release gates are tracked in
 [`docs/public-release-readiness.md`](docs/public-release-readiness.md). The
 planned progressive result experience is documented in
@@ -352,12 +378,15 @@ Every write requires:
 
 ```text
 MCP client
-  -> intent and AWS-context refinement
+  -> focus, operation, intent, and AWS-context refinement
   -> ephemeral assessment store
-      -> concise conversational projection
-      -> filtered cursor-paginated exploration
-      -> prioritized remediation queue
-      -> complete report export
+      -> contextual Well-Architected review
+      -> bounded architecture neighborhood
+      -> evidence and operation ledger
+      -> contextual recommendation queue
+      -> filtered exploration and complete report export
+  -> versioned applicability and knowledge packs
+  -> safe Terraform and CloudFormation parsers
   -> collector registry + ExecutableRuleSpec registry
   -> live recommendation-source adapters + deterministic deduplication
   -> AWS SDK provider (default) or AWS CLI compatibility provider
@@ -366,14 +395,18 @@ MCP client
   -> plan store + explicit guarded writes
 ```
 
-Service collectors run with bounded concurrency. A service snapshot is reused
-between its rules, and `rule_filter` narrows both rules and AWS calls.
+Contextual reviews resolve knowledge before AWS calls, read the primary resource
+first, and traverse at most two typed relationship hops. They are limited to 25
+graph nodes and 50 deduplicated AWS reads. A missing edge never proves a missing
+dependency. Full assessments continue to run service collectors with bounded
+concurrency; a service snapshot is reused between rules, and `rule_filter`
+narrows both rules and AWS calls.
 Twenty-seven signal rules batch CloudWatch `GetMetricData` requests or consume
 explicit assessment-local Kubernetes historical metric fixtures through an
 assessment-local cache. Missing metric data is unknown, never zero.
 
 This release does not include multi-account traversal, all-Region orchestration,
-IaC scanning, attack graphs, hosted history, telemetry, or an AWS MCP provider.
+CDK/Pulumi source review, attack graphs, hosted history, telemetry, or an AWS MCP provider.
 See [`docs/expansion-plan.md`](docs/expansion-plan.md) for multi-account,
 cross-Region, source mapping, performance, and IaC remediation expansion.
 
@@ -396,10 +429,12 @@ make emulator-doctor
 make emulator-mcp-e2e
 ```
 
-The E2E proves `assess -> status -> partial results -> unified source
-deduplication -> concise results -> paginated complete query -> complete PDF ->
-plan -> verify` using dummy
-credentials and no writes. `make emulator-coverage` also
+The E2E proves both `full assessment -> partial/final results -> unified source
+deduplication -> paginated query -> PDF -> plan -> verify` and `vague request ->
+focus -> contextual questions -> focused review -> resource details ->
+investigation -> report`. It verifies the focused S3 flow does not call EC2 or
+RDS collectors, remains below the read budget, and performs zero writes.
+`make emulator-coverage` also
 requires a positive finding for every one of the 100 active rules through the
 AWS SDK and AWS CLI providers. Eighty-eight fixtures use LocalEmu APIs directly;
 twelve historical, account-level, metric-dimension, or synthetic-size states use

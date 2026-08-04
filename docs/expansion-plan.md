@@ -30,7 +30,7 @@ step, remediation mode, and verification command or tool call.
 
 ## Current Baseline
 
-As of v0.8.0b1, Steward has:
+As of the v0.9.0b1 candidate, Steward has:
 
 - 120 free native rules across 17 runtime scopes.
 - A 649-entry bundled knowledge catalog.
@@ -41,6 +41,10 @@ As of v0.8.0b1, Steward has:
   remediation planning, guarded apply, and verification tools.
 - Ephemeral point-in-time assessments with no hosted telemetry, no sign-in, and
   no persistent AWS inventory.
+- Contextual Well-Architected reviews for all 17 executable scopes, using five
+  validated knowledge-pack families and a bounded typed relationship graph.
+- Read-only Terraform HCL, Terraform plan JSON, and CloudFormation JSON/YAML
+  review for proposed infrastructure without executing IaC or modifying files.
 
 This plan expands from configuration recommendations into operational,
 performance, cost, security, and code-aware recommendations.

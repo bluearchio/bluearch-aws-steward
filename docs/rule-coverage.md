@@ -1,6 +1,6 @@
 # Native Rule Coverage
 
-BlueArch AWS Steward v0.8.0b1 contains 120 canonical native rules across 17
+BlueArch AWS Steward v0.9.0b1 contains 120 canonical native rules across 17
 runtime scopes. Aliases are routing conveniences and do not increase this
 count. The complete knowledge catalog contains 649 entries; therefore native
 automation coverage is 18.49%. All 120 rules are in the open-source `free`
@@ -10,6 +10,35 @@ access tier; future canonical additions after this baseline default to
 Use `bluearch_get_coverage` for the runtime-authoritative result. A rule that is
 skipped because of missing provider capability or AWS permission is not
 evaluated and must never be interpreted as passing.
+
+## Contextual Knowledge Coverage
+
+Contextual reviews use five Steward-owned, versioned applicability packs:
+
+- Account foundation
+- Storage and protection
+- Compute and runtime
+- Data platforms
+- Edge and integration
+
+Together they define a resource profile for every executable runtime scope.
+Profiles select only the Well-Architected practices that apply to the focused
+resource and operation. They do not treat the absence of evidence as alignment,
+and organizational or process controls remain manual when relevant.
+
+The packaged knowledge manifest is the authoritative source for profile, rule,
+and Well-Architected mapping counts. Package validation rejects an unknown
+native rule, unknown WAF identifier, invalid relationship collector, or a
+profile that references a rule outside its runtime scope. Run:
+
+```bash
+make catalog-check
+make knowledge-check
+```
+
+The bundled catalog remains searchable in full. Contextual reviews evaluate
+only practices selected by a validated profile and report all other relevant
+or unavailable evidence as `not_evaluated`, `requires_input`, or `unknown`.
 
 ## IAM (11)
 
