@@ -10,18 +10,30 @@ as preview are not covered by a stable API compatibility promise.
 ### Changed
 
 - Findings are now ranked by contextual risk instead of alphabetically within
-  severity. Root credentials, publicly reachable resources and internet-exposed
-  administrative ports rank above lower-risk findings that merely carry a higher
-  catalog severity. Delivery order changes for every consumer.
+  severity. Contextual risk is a ranking tier of its own: root credentials,
+  publicly reachable resources and internet-exposed administrative ports rank
+  above every finding without contextual risk, whatever its catalog severity or
+  composite score. Delivery order changes for every consumer.
 - The default report profile is now `executive`, which leads with the ten
   highest-priority findings and the grouped rollup. Request `technical`,
   `remediation` or `complete` for the previous finding-by-finding output.
-  Summary totals continue to reflect every finding; only the displayed list is capped.
+  Summary totals continue to reflect every finding; only the displayed list is
+  capped, and Markdown, HTML and PDF state how many findings they show out of
+  the total. CSV, SARIF and JSON always serialise the complete finding set.
+- All four report profiles now behave differently: `remediation` reports only
+  findings whose remediation Steward supports, and `complete` reports every
+  finding with no caps at all.
 
 ### Fixed
 
 - PDF export no longer fails with `TypeError` when a summary reports capability
   errors, service errors or skipped rules as counts rather than lists.
+- Grouped rollups in Markdown, HTML and PDF reports no longer print `None` and a
+  zero priority for contextual architecture reviews, whose groups use a
+  different shape from native solution-card groups.
+- Contextual risk factors are now detected for raw scan findings, not only for
+  translated opportunities, so the unified recommendation queue no longer holds
+  two contradictory priorities for the same issue.
 
 ## [0.9.0b1] - Preview candidate
 

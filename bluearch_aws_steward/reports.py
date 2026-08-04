@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 from bluearch_aws_steward import __version__
 from bluearch_aws_steward.catalog import load_rules
 from bluearch_aws_steward.models import REPORT_PROFILES
+from bluearch_aws_steward.remediation import is_apply_supported
 from bluearch_aws_steward.result_query import (
     complete_result_items,
     item_matches_filters,
@@ -43,7 +44,9 @@ def build_report_model(
     filtered_items = [
         item for item in complete_items if item_matches_filters(item, normalized_filters)
     ]
-    raw_items = filtered_items if include_all_findings else filtered_items[:100]
+    # "complete" means complete: it ignores the convenience cap as well.
+    keep_every_finding = include_all_findings or report_profile == "complete"
+    raw_items = filtered_items if keep_every_finding else filtered_items[:100]
     rule_lookup = {rule_key: rule for rule in load_rules() for rule_key in (rule.short_id, rule.id)}
     items = [_normalize_report_finding(item, rule_lookup) for item in raw_items]
     resource_context: JSON = {}
@@ -69,16 +72,17 @@ def build_report_model(
     )
     contextual = result.get("assessment_mode") == "architectural_review"
     contextual_limitations = list(result.get("limitations") or []) if contextual else []
-    # The executive cap is a presentation limit only. CSV, SARIF and the JSON
-    # model always serialise "findings" in full, so a CI consumer never silently
-    # receives 10 rows out of 1428.
-    presented_items = items
-    if report_profile == "executive" and len(items) > EXECUTIVE_FINDING_LIMIT:
+    # The profile selects report content; the executive cap is a presentation
+    # limit only. CSV, SARIF and the JSON model always serialise "findings" in
+    # full, so a CI consumer never silently receives 10 rows out of 1428.
+    profile_items = _profile_findings(items, report_profile)
+    presented_items = profile_items
+    if report_profile == "executive" and len(profile_items) > EXECUTIVE_FINDING_LIMIT:
         presented_items = sorted(
-            items,
+            profile_items,
             key=lambda item: -float(item.get("priority_score") or 0.0),
         )[:EXECUTIVE_FINDING_LIMIT]
-    findings_truncated = len(presented_items) < len(items)
+    findings_truncated = len(presented_items) < len(profile_items)
     return {
         "schema_version": "report-0.1",
         "report_type": "bluearch-aws-steward-assessment",
@@ -104,6 +108,7 @@ def build_report_model(
             "findings": len(items),
             "complete_assessment_findings": len(complete_items),
             "filtered_findings": len(filtered_items),
+            "report_findings": len(profile_items),
             "presented_findings": len(presented_items),
             "report_truncated": len(presented_items) < len(filtered_items),
             "resources": len({str(item.get("resource")) for item in items if item.get("resource")}),
@@ -137,7 +142,7 @@ def build_report_model(
             "validation_statuses": summary.get("validation_statuses") or {},
             "incomplete_sources": summary.get("incomplete_sources") or [],
         },
-        "findings": items,
+        "findings": profile_items,
         "presented_findings": presented_items,
         "findings_truncated": findings_truncated,
         "focus": deepcopy_json(result.get("focus") or {}) if contextual else {},
@@ -165,6 +170,26 @@ def build_report_model(
             "No AWS write actions were applied by report generation.",
         ],
     }
+
+
+def _remediation_supported(item: JSON) -> bool:
+    apply_block = mapping(item.get("apply"))
+    supported = apply_block.get("supported")
+    if isinstance(supported, bool):
+        return supported
+    return is_apply_supported(item)
+
+
+def _profile_findings(items: List[JSON], report_profile: str) -> List[JSON]:
+    """Findings the profile puts in the report.
+
+    ``remediation`` narrows the report to findings Steward can actually
+    remediate. ``executive``, ``technical`` and ``complete`` all carry every
+    finding; the executive profile only narrows what the documents display.
+    """
+    if report_profile == "remediation":
+        return [item for item in items if _remediation_supported(item)]
+    return list(items)
 
 
 def mapping(value: Any) -> JSON:

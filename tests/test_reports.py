@@ -188,7 +188,7 @@ class PdfCountFieldTests(unittest.TestCase):
 
 
 class ReportProfileTests(unittest.TestCase):
-    def _result(self) -> dict:
+    def _result(self, count: int = 40) -> dict:
         opportunities = [
             {
                 "rule": f"rule-{index:03d}",
@@ -196,17 +196,19 @@ class ReportProfileTests(unittest.TestCase):
                 "resource": f"s3://bucket-{index}",
                 "severity": "low",
                 "priority": {"score": float(index)},
+                # A quarter of the findings can actually be remediated by Steward.
+                "apply": {"supported": index % 4 == 0},
             }
-            for index in range(40)
+            for index in range(count)
         ]
         return {
             "observed_at": "2026-08-04T00:00:00Z",
             "provider": "aws-sdk",
-            "summary": {"resources_scanned": 40},
+            "summary": {"resources_scanned": count},
             "complete_opportunities": opportunities,
             "grouped_solutions": [
-                {"rule": "rule-039", "resources": 1, "priority_score": 39.0},
-                {"rule": "rule-000", "resources": 39, "priority_score": 0.0},
+                {"rule": f"rule-{count - 1:03d}", "resources": 1, "priority_score": 39.0},
+                {"rule": "rule-000", "resources": count - 1, "priority_score": 0.0},
             ],
         }
 
@@ -308,6 +310,32 @@ class ReportProfileTests(unittest.TestCase):
         model = build_report_model(self._result())
         self.assertEqual(model["report_profile"], "executive")
         self.assertEqual(len(model["presented_findings"]), 10)
+
+    def test_remediation_profile_keeps_only_remediable_findings(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="remediation")
+
+        self.assertEqual(len(model["findings"]), 10)
+        self.assertEqual(len(model["presented_findings"]), 10)
+        self.assertTrue(
+            all(item["apply"]["supported"] for item in model["findings"]),
+            "the remediation profile must not carry findings Steward cannot remediate",
+        )
+
+    def test_complete_profile_keeps_everything_uncapped(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        result = self._result(count=120)
+        technical = build_report_model(
+            result, report_profile="technical", include_all_findings=False
+        )
+        complete = build_report_model(result, report_profile="complete", include_all_findings=False)
+
+        self.assertEqual(len(technical["findings"]), 100)
+        self.assertEqual(len(complete["findings"]), 120)
+        self.assertEqual(len(complete["presented_findings"]), 120)
+        self.assertFalse(complete["findings_truncated"])
 
     def test_machine_readable_formats_are_never_truncated_by_the_default_profile(self) -> None:
         from bluearch_aws_steward.reports import build_report_model, render_report
