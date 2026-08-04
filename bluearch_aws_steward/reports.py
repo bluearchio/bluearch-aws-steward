@@ -444,17 +444,50 @@ def _contextual_markdown(model: JSON) -> List[str]:
     return lines
 
 
+def group_label(group: JSON) -> str:
+    """Label for a rollup group from either grouping shape.
+
+    _group_solution_cards groups by rule; a contextual review groups by service
+    under the key "group". A renderer that knows only one shape prints "None" for
+    every group produced by the other.
+    """
+    return str(group.get("rule") or group.get("group") or "unknown")
+
+
+def group_member_count(group: JSON) -> int:
+    """Member count for a rollup group from either grouping shape."""
+    for key in ("resources", "count", "solutions"):
+        value = group.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if value:
+            return int(value)
+    return 0
+
+
+def group_priority(group: JSON) -> float | None:
+    """Group priority, or None when the grouping carries no priority at all.
+
+    Contextual groups are not scored. Printing 0 for them would state a measured
+    priority the data does not support, so the renderers omit the field instead.
+    """
+    value = group.get("priority_score")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
 def _grouped_markdown(model: JSON) -> List[str]:
     groups = model.get("grouped_solutions") or []
     if not groups:
         return []
     lines = ["", "## Grouped Solutions", ""]
     for group in groups:
-        resources = group.get("resources") or group.get("solutions") or 0
-        lines.append(
-            f"- `{group.get('rule')}` — {resources} resource(s), "
-            f"priority {group.get('priority_score', 0)}"
-        )
+        priority = group_priority(group)
+        line = f"- `{group_label(group)}` — {group_member_count(group)} resource(s)"
+        if priority is not None:
+            line += f", priority {priority}"
+        lines.append(line)
         fix = group.get("recommended_fix")
         if fix:
             lines.append(f"  {fix}")
@@ -504,19 +537,26 @@ def _grouped_html(model: JSON) -> str:
     groups = model.get("grouped_solutions") or []
     if not groups:
         return ""
+    scored = any(group_priority(group) is not None for group in groups)
     rows = "".join(
         "<tr>"
-        f"<td>{html.escape(str(group.get('rule')))}</td>"
-        f"<td>{html.escape(str(group.get('resources') or group.get('solutions') or 0))}</td>"
-        f"<td>{html.escape(str(group.get('priority_score', 0)))}</td>"
-        "</tr>"
+        f"<td>{html.escape(group_label(group))}</td>"
+        f"<td>{group_member_count(group)}</td>"
+        + (f"<td>{html.escape(_group_priority_text(group))}</td>" if scored else "")
+        + "</tr>"
         for group in groups
     )
+    priority_header = "<th>Priority</th>" if scored else ""
     return (
         "<h2>Grouped Solutions</h2>"
-        "<table><tr><th>Rule</th><th>Resources</th><th>Priority</th></tr>"
+        f"<table><tr><th>Group</th><th>Resources</th>{priority_header}</tr>"
         f"{rows}</table>"
     )
+
+
+def _group_priority_text(group: JSON) -> str:
+    priority = group_priority(group)
+    return "not scored" if priority is None else str(priority)
 
 
 def _contextual_html(model: JSON) -> str:

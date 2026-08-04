@@ -26,6 +26,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from bluearch_aws_steward.reports import group_label, group_member_count, group_priority
+
 JSON = Dict[str, Any]
 
 BLUE = HexColor("#1F6FEB")
@@ -575,18 +577,13 @@ def _grouped_summary(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any
     groups = model.get("grouped_solutions") or []
     if not groups:
         return []
-    story: List[Any] = [Paragraph("Grouped Solutions", styles["heading"])]
+    story: List[Any] = [PageBreak(), Paragraph("Grouped Solutions", styles["heading"])]
     for group in groups:
-        resources = group.get("resources") or group.get("solutions") or 0
-        story.append(
-            Paragraph(
-                _safe(
-                    f"{group.get('rule')} — {resources} resource(s), "
-                    f"priority {group.get('priority_score', 0)}"
-                ),
-                styles["small"],
-            )
-        )
+        priority = group_priority(group)
+        text = f"{group_label(group)} — {group_member_count(group)} resource(s)"
+        if priority is not None:
+            text += f", priority {priority}"
+        story.append(Paragraph(_safe(text), styles["small"]))
     return story
 
 

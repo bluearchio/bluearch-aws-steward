@@ -337,5 +337,101 @@ class ReportProfileTests(unittest.TestCase):
         self.assertEqual(exported["report_profile"], "executive")
 
 
+class ContextualGroupedRolloutTests(unittest.TestCase):
+    """The two grouping shapes must both render.
+
+    _group_solution_cards emits {rule, resources, priority_score, ...}.
+    _group_recommendations (contextual reviews) emits {group, count,
+    highest_severity, items}. A renderer that knows only the first shape prints
+    "`None` - 0 resource(s), priority 0" for every contextual group, which is
+    fabricated data in the flagship mode's default report.
+    """
+
+    def _model(self) -> dict:
+        from bluearch_aws_steward.reports import build_report_model
+
+        return build_report_model(
+            {
+                "observed_at": "2026-08-04T00:00:00Z",
+                "provider": "aws-sdk",
+                "assessment_mode": "architectural_review",
+                "summary": {"resources_scanned": 4},
+                "complete_opportunities": [],
+                "grouped_solutions": [
+                    {
+                        "group": "lambda",
+                        "count": 3,
+                        "highest_severity": "high",
+                        "items": [{"rule": "lambda-tracing-disabled"}],
+                    },
+                    {
+                        "group": "s3",
+                        "count": 1,
+                        "highest_severity": "medium",
+                        "items": [{"rule": "s3-no-lifecycle"}],
+                    },
+                ],
+            },
+            report_profile="executive",
+        )
+
+    def test_markdown_names_contextual_groups_and_omits_unscored_priority(self) -> None:
+        from bluearch_aws_steward.reports import render_report
+
+        rendered = str(render_report(self._model(), "markdown"))
+
+        self.assertIn("`lambda` — 3 resource(s)", rendered)
+        self.assertIn("`s3` — 1 resource(s)", rendered)
+        self.assertNotIn("`None`", rendered)
+        self.assertNotIn("priority 0", rendered)
+
+    def test_html_names_contextual_groups_and_omits_unscored_priority(self) -> None:
+        from bluearch_aws_steward.reports import _grouped_html
+
+        rendered = _grouped_html(self._model())
+
+        self.assertIn("<td>lambda</td>", rendered)
+        self.assertIn("<td>3</td>", rendered)
+        self.assertNotIn("None", rendered)
+        self.assertNotIn("<th>Priority</th>", rendered)
+
+    def test_pdf_names_contextual_groups_and_omits_unscored_priority(self) -> None:
+        from bluearch_aws_steward.pdf_report import _grouped_summary, _styles
+
+        texts = [
+            element.text
+            for element in _grouped_summary(self._model(), _styles())
+            if hasattr(element, "text")
+        ]
+
+        self.assertIn("lambda — 3 resource(s)", texts)
+        self.assertIn("s3 — 1 resource(s)", texts)
+        self.assertFalse([text for text in texts if "None" in text or "priority 0" in text])
+
+    def test_solution_card_groups_still_render_their_priority(self) -> None:
+        from bluearch_aws_steward.reports import _grouped_html, _grouped_markdown
+
+        model = {
+            "grouped_solutions": [
+                {"rule": "s3-public-bucket", "resources": 4, "priority_score": 71.0}
+            ]
+        }
+
+        markdown = "\n".join(_grouped_markdown(model))
+        self.assertIn("`s3-public-bucket` — 4 resource(s), priority 71.0", markdown)
+        self.assertIn("<td>71.0</td>", _grouped_html(model))
+
+    def test_pdf_grouped_section_starts_on_its_own_page(self) -> None:
+        from reportlab.platypus import PageBreak
+
+        from bluearch_aws_steward.pdf_report import _grouped_summary, _styles
+
+        story = _grouped_summary(self._model(), _styles())
+
+        # Without a page break the rollup collides with the coverage table.
+        self.assertTrue(story)
+        self.assertIsInstance(story[0], PageBreak)
+
+
 if __name__ == "__main__":
     unittest.main()
