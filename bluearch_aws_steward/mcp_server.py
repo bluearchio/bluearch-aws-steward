@@ -6360,6 +6360,7 @@ def _group_solution_cards(solution_cards: List[JSON]) -> List[JSON]:
                 "objective": key[0],
                 "rule": key[1],
                 "severity": card.get("severity"),
+                "priority_score": 0.0,
                 "solutions": 0,
                 "resources": 0,
                 "sample_resources": [],
@@ -6372,6 +6373,9 @@ def _group_solution_cards(solution_cards: List[JSON]) -> List[JSON]:
         )
         group["solutions"] += 1
         group["severity"] = _higher_severity(group.get("severity"), card.get("severity"))
+        card_priority = (card.get("priority") or {}).get("score")
+        if isinstance(card_priority, (int, float)):
+            group["priority_score"] = max(float(group["priority_score"]), float(card_priority))
         cost_estimate = card.get("cost_estimate") or {}
         savings = cost_estimate.get("estimated_monthly_savings_usd")
         if savings is not None:

@@ -55,5 +55,59 @@ class TriageOrderingTests(unittest.TestCase):
             self.assertIsInstance(item["priority"]["score"], (int, float))
 
 
+class GroupPriorityTests(unittest.TestCase):
+    def test_group_priority_is_the_maximum_not_the_sum(self) -> None:
+        from bluearch_aws_steward.mcp_server import _group_solution_cards
+
+        groups = _group_solution_cards(
+            [
+                {
+                    "objective": "all",
+                    "rule": "s3-no-lifecycle",
+                    "severity": "low",
+                    "resource": f"s3://bucket-{index}",
+                    "priority": {"score": 12.0},
+                }
+                for index in range(50)
+            ]
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["priority_score"], 12.0)
+
+    def test_single_dangerous_finding_outranks_a_large_low_risk_group(self) -> None:
+        from bluearch_aws_steward.mcp_server import _group_solution_cards
+
+        cards = [
+            {
+                "objective": "all",
+                "rule": "s3-no-lifecycle",
+                "severity": "low",
+                "resource": f"s3://bucket-{index}",
+                "priority": {"score": 12.0},
+            }
+            for index in range(50)
+        ]
+        cards.append(
+            {
+                "objective": "all",
+                "rule": "iam-root-access-key-present",
+                "severity": "medium",
+                "resource": "iam://account/root",
+                "priority": {"score": 80.0},
+            }
+        )
+        groups = _group_solution_cards(cards)
+        ranked = sorted(groups, key=lambda group: -group["priority_score"])
+        self.assertEqual(ranked[0]["rule"], "iam-root-access-key-present")
+
+    def test_missing_priority_defaults_to_zero(self) -> None:
+        from bluearch_aws_steward.mcp_server import _group_solution_cards
+
+        groups = _group_solution_cards(
+            [{"objective": "all", "rule": "s3-no-lifecycle", "resource": "s3://b"}]
+        )
+        self.assertEqual(groups[0]["priority_score"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
