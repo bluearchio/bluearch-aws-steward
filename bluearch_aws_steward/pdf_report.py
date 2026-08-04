@@ -26,6 +26,15 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from bluearch_aws_steward.reports import (
+    group_label,
+    group_member_count,
+    group_priority,
+    mapping,
+    presentation_note,
+    presented_findings,
+)
+
 JSON = Dict[str, Any]
 
 BLUE = HexColor("#1F6FEB")
@@ -47,6 +56,17 @@ SEVERITY_COLORS = {
     "unknown": UNKNOWN,
 }
 PageCallback = Callable[[Canvas, SimpleDocTemplate], None]
+
+
+def _count(value: Any) -> int:
+    """Count entries whether the summary field carries a list or a pre-counted int."""
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, (list, tuple, set, dict)):
+        return len(value)
+    return 0
 
 
 class _AssessmentDocTemplate(SimpleDocTemplate):
@@ -82,9 +102,9 @@ def render_pdf_report(model: JSON) -> bytes:
         story.extend(_contextual_review(model, styles))
     story.extend(_risk_overview(summary, styles))
     story.extend(_coverage(summary, styles))
+    story.extend(_grouped_summary(model, styles))
     if report_profile == "executive":
-        executive_model = {**model, "findings": list(model.get("findings") or [])[:25]}
-        story.extend(_findings_summary(executive_model, styles))
+        story.extend(_findings_summary(model, styles))
     elif report_profile == "remediation":
         story.extend(_finding_details(model, styles))
     else:
@@ -528,9 +548,9 @@ def _coverage(summary: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
             "Complete scoped evaluation",
             "Yes" if coverage.get("complete_catalog_evaluation") else "No",
         ),
-        ("Service errors", len(summary.get("service_errors") or [])),
-        ("Capability errors", len(summary.get("capability_errors") or [])),
-        ("Rules skipped", len(summary.get("rules_skipped") or [])),
+        ("Service errors", _count(summary.get("service_errors"))),
+        ("Capability errors", _count(summary.get("capability_errors"))),
+        ("Rules skipped", _count(summary.get("rules_skipped"))),
     ]
     table = Table(
         [
@@ -559,6 +579,20 @@ def _coverage(summary: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
     return [PageBreak(), Paragraph("Detection coverage", styles["heading"]), table]
 
 
+def _grouped_summary(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
+    groups = model.get("grouped_solutions") or []
+    if not groups:
+        return []
+    story: List[Any] = [PageBreak(), Paragraph("Grouped Solutions", styles["heading"])]
+    for group in groups:
+        priority = group_priority(group)
+        text = f"{group_label(group)} — {group_member_count(group)} resource(s)"
+        if priority is not None:
+            text += f", priority {priority}"
+        story.append(Paragraph(_safe(text), styles["small"]))
+    return story
+
+
 def _findings_summary(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
     rows: List[List[Any]] = [
         [
@@ -570,7 +604,7 @@ def _findings_summary(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[An
             Paragraph("Savings", styles["table_header"]),
         ]
     ]
-    for index, item in enumerate(model.get("findings") or [], start=1):
+    for index, item in enumerate(presented_findings(model), start=1):
         rows.append(
             [
                 Paragraph(str(index), styles["table_cell"]),
@@ -604,12 +638,20 @@ def _findings_summary(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[An
     for row_number in range(2, len(rows), 2):
         commands.append(("BACKGROUND", (0, row_number), (-1, row_number), HexColor("#F8FAFC")))
     table.setStyle(TableStyle(commands))
-    return [Paragraph("Findings summary", styles["heading"]), table]
+    return [
+        Paragraph("Findings summary", styles["heading"]),
+        Paragraph(_safe(presentation_note(model)), styles["small"]),
+        table,
+    ]
 
 
 def _finding_details(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any]:
-    elements: List[Any] = [PageBreak(), Paragraph("Finding details", styles["heading"])]
-    findings = list(model.get("findings") or [])
+    elements: List[Any] = [
+        PageBreak(),
+        Paragraph("Finding details", styles["heading"]),
+        Paragraph(_safe(presentation_note(model)), styles["small"]),
+    ]
+    findings = presented_findings(model)
     if not findings:
         elements.append(Paragraph("No resources matched the evaluated rules.", styles["body"]))
         return elements
@@ -622,11 +664,9 @@ def _finding_details(model: JSON, styles: Dict[str, ParagraphStyle]) -> List[Any
             f'{index}. <font color="{severity_color}">[{_safe(severity.upper())}]</font> {_safe(rule)}',
             styles["subheading"],
         )
-        resource_ref = (
-            item.get("resource_ref") if isinstance(item.get("resource_ref"), dict) else {}
-        )
-        remediation = item.get("remediation") if isinstance(item.get("remediation"), dict) else {}
-        apply = item.get("apply") if isinstance(item.get("apply"), dict) else {}
+        resource_ref = mapping(item.get("resource_ref"))
+        remediation = mapping(item.get("remediation"))
+        apply = mapping(item.get("apply"))
         context_rows = [
             ("Service", item.get("service") or "unknown"),
             ("Resource", item.get("resource") or "unknown"),

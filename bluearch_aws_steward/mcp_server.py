@@ -68,6 +68,7 @@ from bluearch_aws_steward.recommendation_queue import (
     NATIVE_SOURCE,
     annotate_validation,
     consolidate_scan_results,
+    priority_score,
     recommendation_fingerprint,
 )
 from bluearch_aws_steward.remediation import (
@@ -1750,7 +1751,7 @@ class StewardMcpServer:
             assessment_request = self._assessments.get_request(assessment_id)
             report_profile = str(
                 ((assessment_request.get("result_preferences") or {}).get("report_profile"))
-                or "technical"
+                or "executive"
             )
             result["pdf_report"] = self._tool_export_report(
                 {
@@ -1792,7 +1793,7 @@ class StewardMcpServer:
             job["result"],
             include_clean_resources=bool(arguments.get("include_clean_resources")),
             filters=arguments.get("filters") or {},
-            report_profile=str(arguments.get("report_profile") or "technical"),
+            report_profile=str(arguments.get("report_profile") or "executive"),
             include_all_findings=bool(arguments.get("include_all_findings", True)),
         )
         content = render_report(model, report_format)
@@ -5643,6 +5644,8 @@ def _tool_find_opportunities(
         for finding in findings
         if _finding_matches_objective(finding, objective)
     ]
+    for opportunity in opportunities:
+        opportunity["priority"] = priority_score(opportunity)
     opportunities.sort(key=_opportunity_sort_key)
 
     resources = sorted({opportunity["resource"] for opportunity in opportunities})
@@ -6357,6 +6360,7 @@ def _group_solution_cards(solution_cards: List[JSON]) -> List[JSON]:
                 "objective": key[0],
                 "rule": key[1],
                 "severity": card.get("severity"),
+                "priority_score": 0.0,
                 "solutions": 0,
                 "resources": 0,
                 "sample_resources": [],
@@ -6369,6 +6373,9 @@ def _group_solution_cards(solution_cards: List[JSON]) -> List[JSON]:
         )
         group["solutions"] += 1
         group["severity"] = _higher_severity(group.get("severity"), card.get("severity"))
+        card_priority = (card.get("priority") or {}).get("score")
+        if isinstance(card_priority, (int, float)):
+            group["priority_score"] = max(float(group["priority_score"]), float(card_priority))
         cost_estimate = card.get("cost_estimate") or {}
         savings = cost_estimate.get("estimated_monthly_savings_usd")
         if savings is not None:
@@ -6475,11 +6482,27 @@ def _objective_value_label(objective: str) -> str:
     return labels.get(objective, labels["all"])
 
 
+def _contextual_risk(opportunity: JSON) -> float:
+    """Contextual risk points recorded on an opportunity, 0.0 when unscored."""
+    priority = opportunity.get("priority") or {}
+    components = priority.get("components") or {}
+    value = components.get("contextual_risk")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    return float(value)
+
+
 def _opportunity_sort_key(opportunity: JSON) -> tuple:
     severity_rank = {"high": 0, "medium": 1, "low": 2}
     priority = opportunity.get("priority") or {}
+    # Contextual risk is a ranking tier, not an addend. Root credentials, publicly
+    # reachable resources and internet-exposed administrative ports outrank every
+    # finding that merely carries a higher catalog severity or a richer evidence
+    # trail; the composite score only breaks ties inside a tier.
+    contextual_risk = _contextual_risk(opportunity)
     if isinstance(priority.get("score"), (int, float)):
         return (
+            -contextual_risk,
             -float(priority["score"]),
             severity_rank.get(str(opportunity.get("severity")), 3),
             str(opportunity.get("rule") or ""),
@@ -6495,6 +6518,7 @@ def _opportunity_sort_key(opportunity: JSON) -> tuple:
         )
         risk_adjusted_savings = savings * confidence_weight
         return (
+            -contextual_risk,
             -risk_adjusted_savings,
             confidence_rank,
             -savings,
@@ -6503,7 +6527,8 @@ def _opportunity_sort_key(opportunity: JSON) -> tuple:
             str(opportunity.get("resource") or ""),
         )
     return (
-        severity_rank.get(str(opportunity.get("severity")), 3),
+        -contextual_risk,
+        float(severity_rank.get(str(opportunity.get("severity")), 3)),
         str(opportunity.get("rule") or ""),
         str(opportunity.get("resource") or ""),
     )

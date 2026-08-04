@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
 
 from bluearch_aws_steward.models import utc_now_iso
+from bluearch_aws_steward.risk_factors import risk_factors
 
 JSON = Dict[str, Any]
 
@@ -324,6 +325,7 @@ def priority_score(finding: JSON) -> JSON:
     corroboration = min(10.0, max(0, int(finding.get("source_count") or 1) - 1) * 5.0)
     effort = str(evidence.get("implementation_effort") or "medium").lower()
     effort_score = {"very_low": 5.0, "low": 4.0, "medium": 2.0, "high": 0.0}.get(effort, 2.0)
+    contextual = risk_factors(finding)
     components = {
         "risk": round(risk, 2),
         "freshness_and_confidence": round(confidence, 2),
@@ -331,11 +333,13 @@ def priority_score(finding: JSON) -> JSON:
         "remediation_readiness": round(readiness, 2),
         "corroboration": round(corroboration, 2),
         "implementation_effort": round(effort_score, 2),
+        "contextual_risk": round(float(contextual["total"]), 2),
     }
     return {
         "score": round(min(100.0, sum(components.values())), 2),
         "scale": "0-100",
         "components": components,
+        "risk_factors": contextual["factors"],
         "explanation": (
             "Risk, current evidence, savings, remediation readiness, independent corroboration, "
             "and implementation effort contribute to this deterministic score."

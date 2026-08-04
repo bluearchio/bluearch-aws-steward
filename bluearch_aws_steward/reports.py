@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 from bluearch_aws_steward import __version__
 from bluearch_aws_steward.catalog import load_rules
 from bluearch_aws_steward.models import REPORT_PROFILES
+from bluearch_aws_steward.remediation import is_apply_supported
 from bluearch_aws_steward.result_query import (
     complete_result_items,
     item_matches_filters,
@@ -22,6 +23,7 @@ from bluearch_aws_steward.result_query import (
 JSON = Dict[str, Any]
 RenderedReport = str | bytes
 REPORT_FORMATS = ("json", "markdown", "html", "csv", "sarif", "pdf")
+EXECUTIVE_FINDING_LIMIT = 10
 
 
 def build_report_model(
@@ -29,7 +31,7 @@ def build_report_model(
     *,
     include_clean_resources: bool = False,
     filters: JSON | None = None,
-    report_profile: str = "technical",
+    report_profile: str = "executive",
     include_all_findings: bool = True,
 ) -> JSON:
     if report_profile not in REPORT_PROFILES:
@@ -42,7 +44,9 @@ def build_report_model(
     filtered_items = [
         item for item in complete_items if item_matches_filters(item, normalized_filters)
     ]
-    raw_items = filtered_items if include_all_findings else filtered_items[:100]
+    # "complete" means complete: it ignores the convenience cap as well.
+    keep_every_finding = include_all_findings or report_profile == "complete"
+    raw_items = filtered_items if keep_every_finding else filtered_items[:100]
     rule_lookup = {rule_key: rule for rule in load_rules() for rule_key in (rule.short_id, rule.id)}
     items = [_normalize_report_finding(item, rule_lookup) for item in raw_items]
     resource_context: JSON = {}
@@ -68,10 +72,25 @@ def build_report_model(
     )
     contextual = result.get("assessment_mode") == "architectural_review"
     contextual_limitations = list(result.get("limitations") or []) if contextual else []
+    # The profile selects report content; the executive cap is a presentation
+    # limit only. CSV, SARIF and the JSON model always serialise "findings" in
+    # full, so a CI consumer never silently receives 10 rows out of 1428.
+    profile_items = _profile_findings(items, report_profile)
+    presented_items = profile_items
+    if report_profile == "executive" and len(profile_items) > EXECUTIVE_FINDING_LIMIT:
+        presented_items = sorted(
+            profile_items,
+            key=lambda item: -float(item.get("priority_score") or 0.0),
+        )[:EXECUTIVE_FINDING_LIMIT]
+    findings_truncated = len(presented_items) < len(profile_items)
     return {
         "schema_version": "report-0.1",
         "report_type": "bluearch-aws-steward-assessment",
         "report_profile": report_profile,
+        "grouped_solutions": sorted(
+            deepcopy_json(result.get("grouped_solutions") or []),
+            key=lambda group: -float(group.get("priority_score") or 0.0),
+        ),
         "generated_at": result.get("observed_at") or result.get("generated_at"),
         "provider": result.get("provider") or resource_context.get("provider"),
         "profile": result.get("profile"),
@@ -89,7 +108,9 @@ def build_report_model(
             "findings": len(items),
             "complete_assessment_findings": len(complete_items),
             "filtered_findings": len(filtered_items),
-            "report_truncated": len(items) < len(filtered_items),
+            "report_findings": len(profile_items),
+            "presented_findings": len(presented_items),
+            "report_truncated": len(presented_items) < len(filtered_items),
             "resources": len({str(item.get("resource")) for item in items if item.get("resource")}),
             "by_severity": dict(sorted(severity_counts.items())),
             "by_service": dict(sorted(service_counts.items())),
@@ -121,7 +142,9 @@ def build_report_model(
             "validation_statuses": summary.get("validation_statuses") or {},
             "incomplete_sources": summary.get("incomplete_sources") or [],
         },
-        "findings": items,
+        "findings": profile_items,
+        "presented_findings": presented_items,
+        "findings_truncated": findings_truncated,
         "focus": deepcopy_json(result.get("focus") or {}) if contextual else {},
         "architecture_neighborhood": deepcopy_json(result.get("architecture_neighborhood") or {})
         if contextual
@@ -147,6 +170,56 @@ def build_report_model(
             "No AWS write actions were applied by report generation.",
         ],
     }
+
+
+def _remediation_supported(item: JSON) -> bool:
+    apply_block = mapping(item.get("apply"))
+    supported = apply_block.get("supported")
+    if isinstance(supported, bool):
+        return supported
+    return is_apply_supported(item)
+
+
+def _profile_findings(items: List[JSON], report_profile: str) -> List[JSON]:
+    """Findings the profile puts in the report.
+
+    ``remediation`` narrows the report to findings Steward can actually
+    remediate. ``executive``, ``technical`` and ``complete`` all carry every
+    finding; the executive profile only narrows what the documents display.
+    """
+    if report_profile == "remediation":
+        return [item for item in items if _remediation_supported(item)]
+    return list(items)
+
+
+def mapping(value: Any) -> JSON:
+    """A dict view of a possibly-missing nested field."""
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def presented_findings(model: JSON) -> List[JSON]:
+    """Findings a document renderer should display.
+
+    Machine-readable formats (CSV, SARIF, the JSON model) always serialise
+    ``model["findings"]`` in full. Only markdown, HTML and PDF use this narrowed
+    view, and they state how many findings they are showing out of the total.
+    """
+    presented = model.get("presented_findings")
+    if isinstance(presented, list):
+        return presented
+    findings = model.get("findings")
+    return list(findings) if isinstance(findings, list) else []
+
+
+def presentation_note(model: JSON) -> str:
+    """One line stating how many findings the document shows out of the total."""
+    summary = mapping(model.get("summary"))
+    shown = len(presented_findings(model))
+    findings = model.get("findings")
+    total = summary.get("findings")
+    if not isinstance(total, int) or isinstance(total, bool):
+        total = len(findings) if isinstance(findings, list) else shown
+    return f"Showing {shown} of {total} findings."
 
 
 def deepcopy_json(value: Any) -> Any:
@@ -286,6 +359,7 @@ def write_report(
 def _render_markdown(model: JSON) -> str:
     summary = model["summary"]
     coverage = summary["detection_coverage"]
+    shown = presented_findings(model)
     lines = [
         "# BlueArch AWS Steward Assessment",
         "",
@@ -309,10 +383,11 @@ def _render_markdown(model: JSON) -> str:
     lines.extend(f"- **{key.title()}**: {value}" for key, value in summary["by_severity"].items())
     if model.get("assessment_mode") == "architectural_review":
         lines.extend(_contextual_markdown(model))
-    lines.extend(["", "## Findings", ""])
-    if not model["findings"]:
+    lines.extend(_grouped_markdown(model))
+    lines.extend(["", "## Findings", "", presentation_note(model), ""])
+    if not shown:
         lines.append("No resources matched the evaluated rules.")
-    for item in model["findings"]:
+    for item in shown:
         lines.extend(
             [
                 f"### {item.get('rule') or item.get('rule_id') or 'Unknown rule'}",
@@ -429,10 +504,60 @@ def _contextual_markdown(model: JSON) -> List[str]:
     return lines
 
 
+def group_label(group: JSON) -> str:
+    """Label for a rollup group from either grouping shape.
+
+    _group_solution_cards groups by rule; a contextual review groups by service
+    under the key "group". A renderer that knows only one shape prints "None" for
+    every group produced by the other.
+    """
+    return str(group.get("rule") or group.get("group") or "unknown")
+
+
+def group_member_count(group: JSON) -> int:
+    """Member count for a rollup group from either grouping shape."""
+    for key in ("resources", "count", "solutions"):
+        value = group.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if value:
+            return int(value)
+    return 0
+
+
+def group_priority(group: JSON) -> float | None:
+    """Group priority, or None when the grouping carries no priority at all.
+
+    Contextual groups are not scored. Printing 0 for them would state a measured
+    priority the data does not support, so the renderers omit the field instead.
+    """
+    value = group.get("priority_score")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _grouped_markdown(model: JSON) -> List[str]:
+    groups = model.get("grouped_solutions") or []
+    if not groups:
+        return []
+    lines = ["", "## Grouped Solutions", ""]
+    for group in groups:
+        priority = group_priority(group)
+        line = f"- `{group_label(group)}` — {group_member_count(group)} resource(s)"
+        if priority is not None:
+            line += f", priority {priority}"
+        lines.append(line)
+        fix = group.get("recommended_fix")
+        if fix:
+            lines.append(f"  {fix}")
+    return lines
+
+
 def _render_html(model: JSON) -> str:
     summary = model["summary"]
     rows = []
-    for item in model["findings"]:
+    for item in presented_findings(model):
         savings = item.get("estimated_monthly_savings_usd")
         cost_display = (
             f"USD {float(savings):.2f} ({item.get('cost_confidence') or 'not_available'})"
@@ -457,14 +582,42 @@ def _render_html(model: JSON) -> str:
         for key, value in summary["by_severity"].items()
     )
     contextual_html = _contextual_html(model)
+    grouped_html = _grouped_html(model)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>BlueArch AWS Steward Assessment</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#172033}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #d8dee9;padding:.55rem;text-align:left}}th{{background:#edf2f7}}.summary{{display:flex;gap:2rem;flex-wrap:wrap}}.metric{{font-size:1.4rem}}.note{{color:#536174}}</style></head>
 <body><h1>BlueArch AWS Steward Assessment</h1><p class="note">Point-in-time, read-only report generated at {html.escape(str(model.get("generated_at") or "unknown"))}. Region: {html.escape(str(model.get("region") or "unknown"))}.</p>
 <section class="summary"><div class="metric">Findings <strong>{summary["findings"]}</strong></div><div class="metric">Resources <strong>{summary["resources"]}</strong></div><div class="metric">Rules <strong>{summary["rules_evaluated"]}</strong></div><div class="metric">Estimated monthly savings <strong>USD {summary["estimated_monthly_savings_usd"]:.2f}</strong></div></section>
-{contextual_html}<h2>Severity</h2><ul>{severity}</ul><h2>Findings</h2>
+{contextual_html}{grouped_html}<h2>Severity</h2><ul>{severity}</ul><h2>Findings</h2>
+<p class="note">{html.escape(presentation_note(model))}</p>
 <table><thead><tr><th>Severity</th><th>Service</th><th>Rule</th><th>Resource</th><th>Sources / freshness</th><th>Priority</th><th>Risk</th><th>Evidence</th><th>Savings / confidence</th></tr></thead><tbody>{"".join(rows) or '<tr><td colspan="9">No matched resources.</td></tr>'}</tbody></table>
 <h2>Limitations</h2><ul>{"".join(f"<li>{html.escape(_limitation_text(note))}</li>" for note in model["limitations"])}</ul></body></html>"""
+
+
+def _grouped_html(model: JSON) -> str:
+    groups = model.get("grouped_solutions") or []
+    if not groups:
+        return ""
+    scored = any(group_priority(group) is not None for group in groups)
+    rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(group_label(group))}</td>"
+        f"<td>{group_member_count(group)}</td>"
+        + (f"<td>{html.escape(_group_priority_text(group))}</td>" if scored else "")
+        + "</tr>"
+        for group in groups
+    )
+    priority_header = "<th>Priority</th>" if scored else ""
+    return (
+        "<h2>Grouped Solutions</h2>"
+        f"<table><tr><th>Group</th><th>Resources</th>{priority_header}</tr>"
+        f"{rows}</table>"
+    )
+
+
+def _group_priority_text(group: JSON) -> str:
+    priority = group_priority(group)
+    return "not scored" if priority is None else str(priority)
 
 
 def _contextual_html(model: JSON) -> str:

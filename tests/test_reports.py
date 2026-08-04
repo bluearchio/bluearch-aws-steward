@@ -163,5 +163,338 @@ class ReportTests(unittest.TestCase):
             render_report(build_report_model(self.result), "docx")
 
 
+class PdfCountFieldTests(unittest.TestCase):
+    def test_pdf_renders_when_capability_errors_is_an_int(self) -> None:
+        from bluearch_aws_steward.pdf_report import render_pdf_report
+
+        model = {
+            "generated_at": "2026-08-04T00:00:00Z",
+            "provider": "aws-sdk",
+            "report_profile": "technical",
+            "summary": {
+                "resources_scanned": 10,
+                "complete_findings": 1,
+                "capability_errors": 3,
+                "service_errors": 0,
+                "rules_skipped": 2,
+                "detection_coverage": {},
+            },
+            "findings": [],
+            "severity_counts": {},
+            "service_counts": {},
+        }
+        pdf = render_pdf_report(model)
+        self.assertTrue(pdf.startswith(b"%PDF-"))
+
+
+class ReportProfileTests(unittest.TestCase):
+    def _result(self, count: int = 40) -> dict:
+        opportunities = [
+            {
+                "rule": f"rule-{index:03d}",
+                "service": "s3",
+                "resource": f"s3://bucket-{index}",
+                "severity": "low",
+                "priority": {"score": float(index)},
+                # A quarter of the findings can actually be remediated by Steward.
+                "apply": {"supported": index % 4 == 0},
+            }
+            for index in range(count)
+        ]
+        return {
+            "observed_at": "2026-08-04T00:00:00Z",
+            "provider": "aws-sdk",
+            "summary": {"resources_scanned": count},
+            "complete_opportunities": opportunities,
+            "grouped_solutions": [
+                {"rule": f"rule-{count - 1:03d}", "resources": 1, "priority_score": 39.0},
+                {"rule": "rule-000", "resources": count - 1, "priority_score": 0.0},
+            ],
+        }
+
+    def test_executive_profile_limits_presented_findings_to_ten(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="executive")
+        self.assertEqual(len(model["presented_findings"]), 10)
+        self.assertEqual(len(model["findings"]), 40)
+
+    def test_executive_profile_presents_the_highest_priority_findings(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="executive")
+        scores = [item["priority_score"] for item in model["presented_findings"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        self.assertEqual(scores[0], 39.0)
+
+    def test_technical_profile_keeps_every_finding(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="technical")
+        self.assertEqual(len(model["findings"]), 40)
+
+    def test_executive_profile_keeps_summary_totals_truthful(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        technical_model = build_report_model(self._result(), report_profile="technical")
+        model = build_report_model(self._result(), report_profile="executive")
+
+        self.assertEqual(len(model["presented_findings"]), 10)
+        self.assertTrue(model["findings_truncated"])
+        self.assertTrue(model["summary"]["report_truncated"])
+        self.assertEqual(model["summary"]["presented_findings"], 10)
+        self.assertEqual(model["summary"]["findings"], technical_model["summary"]["findings"])
+        self.assertEqual(model["summary"]["findings"], 40)
+
+    def test_technical_profile_is_not_marked_truncated(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="technical")
+        self.assertFalse(model["findings_truncated"])
+
+    def test_grouped_solutions_reach_the_model_already_ranked(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="executive")
+        self.assertEqual(len(model["grouped_solutions"]), 2)
+        scores = [group["priority_score"] for group in model["grouped_solutions"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        self.assertEqual(model["grouped_solutions"][0]["rule"], "rule-039")
+
+    def test_markdown_shows_the_grouped_rollup(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model, render_report
+
+        model = build_report_model(self._result(), report_profile="executive")
+        rendered = render_report(model, "markdown")
+        self.assertIn("Grouped Solutions", rendered)
+        self.assertIn("rule-039", rendered)
+
+    def test_html_shows_the_grouped_rollup(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model, render_report
+
+        model = build_report_model(self._result(), report_profile="executive")
+        rendered = render_report(model, "html")
+        self.assertIn("Grouped Solutions", rendered)
+
+    def test_executive_pdf_is_far_smaller_than_technical(self) -> None:
+        from bluearch_aws_steward.pdf_report import render_pdf_report
+        from bluearch_aws_steward.reports import build_report_model
+
+        executive = render_pdf_report(
+            build_report_model(self._result(), report_profile="executive")
+        )
+        technical = render_pdf_report(
+            build_report_model(self._result(), report_profile="technical")
+        )
+        self.assertLess(len(executive), len(technical))
+
+    def test_pdf_renders_the_grouped_section(self) -> None:
+        import copy
+
+        from bluearch_aws_steward.pdf_report import render_pdf_report
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="executive")
+        self.assertTrue(model["grouped_solutions"])
+        with_groups = render_pdf_report(model)
+
+        without = copy.deepcopy(model)
+        without["grouped_solutions"] = []
+        without_groups = render_pdf_report(without)
+
+        self.assertGreater(len(with_groups), len(without_groups))
+
+    def test_default_profile_is_executive(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result())
+        self.assertEqual(model["report_profile"], "executive")
+        self.assertEqual(len(model["presented_findings"]), 10)
+
+    def test_remediation_profile_keeps_only_remediable_findings(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="remediation")
+
+        self.assertEqual(len(model["findings"]), 10)
+        self.assertEqual(len(model["presented_findings"]), 10)
+        self.assertTrue(
+            all(item["apply"]["supported"] for item in model["findings"]),
+            "the remediation profile must not carry findings Steward cannot remediate",
+        )
+
+    def test_complete_profile_keeps_everything_uncapped(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        result = self._result(count=120)
+        technical = build_report_model(
+            result, report_profile="technical", include_all_findings=False
+        )
+        complete = build_report_model(result, report_profile="complete", include_all_findings=False)
+
+        self.assertEqual(len(technical["findings"]), 100)
+        self.assertEqual(len(complete["findings"]), 120)
+        self.assertEqual(len(complete["presented_findings"]), 120)
+        self.assertFalse(complete["findings_truncated"])
+
+    def test_machine_readable_formats_are_never_truncated_by_the_default_profile(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model, render_report
+
+        model = build_report_model(self._result())
+        self.assertEqual(model["report_profile"], "executive")
+
+        rows = list(csv.DictReader(io.StringIO(str(render_report(model, "csv")))))
+        sarif = json.loads(str(render_report(model, "sarif")))
+        exported = json.loads(str(render_report(model, "json")))
+
+        # CSV and SARIF feed CI. Handing them 10 of 40 rows without saying so is
+        # silent data loss, so they must carry the complete finding set.
+        self.assertEqual(len(rows), 40)
+        self.assertEqual(len(sarif["runs"][0]["results"]), 40)
+        self.assertEqual(len(exported["findings"]), 40)
+
+    def test_document_formats_show_ten_findings_and_say_so(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model, render_report
+
+        model = build_report_model(self._result())
+        markdown = str(render_report(model, "markdown"))
+        rendered_html = str(render_report(model, "html"))
+
+        self.assertEqual(markdown.count("\n### rule-"), 10)
+        self.assertIn("Showing 10 of 40 findings.", markdown)
+        self.assertIn("Showing 10 of 40 findings.", rendered_html)
+        self.assertEqual(rendered_html.count("<td>s3://bucket-"), 10)
+
+        pdf = render_report(model, "pdf")
+        self.assertIsInstance(pdf, bytes)
+        self.assertTrue(bytes(pdf).startswith(b"%PDF-"))
+
+    def test_mcp_export_defaults_to_executive(self) -> None:
+        from bluearch_aws_steward.mcp_server import StewardMcpServer
+        from tests.support_triage import call_tool, completed_result
+
+        server = StewardMcpServer()
+        submitted = call_tool(
+            server,
+            1,
+            "bluearch_assess",
+            {
+                "prompt": "Assess this account.",
+                "scan_result": __import__(
+                    "tests.support_triage", fromlist=["triage_scan_result"]
+                ).triage_scan_result(),
+                "objectives": ["all"],
+                "services": ["iam"],
+            },
+        )
+        assessment_id = submitted["assessment_id"]
+        # wait for completion
+        completed_result(server, assessment_id)
+        # export without specifying a profile
+        exported = call_tool(
+            server,
+            2,
+            "bluearch_export_report",
+            {"assessment_id": assessment_id, "format": "json"},
+        )
+        self.assertEqual(exported["report_profile"], "executive")
+
+
+class ContextualGroupedRolloutTests(unittest.TestCase):
+    """The two grouping shapes must both render.
+
+    _group_solution_cards emits {rule, resources, priority_score, ...}.
+    _group_recommendations (contextual reviews) emits {group, count,
+    highest_severity, items}. A renderer that knows only the first shape prints
+    "`None` - 0 resource(s), priority 0" for every contextual group, which is
+    fabricated data in the flagship mode's default report.
+    """
+
+    def _model(self) -> dict:
+        from bluearch_aws_steward.reports import build_report_model
+
+        return build_report_model(
+            {
+                "observed_at": "2026-08-04T00:00:00Z",
+                "provider": "aws-sdk",
+                "assessment_mode": "architectural_review",
+                "summary": {"resources_scanned": 4},
+                "complete_opportunities": [],
+                "grouped_solutions": [
+                    {
+                        "group": "lambda",
+                        "count": 3,
+                        "highest_severity": "high",
+                        "items": [{"rule": "lambda-tracing-disabled"}],
+                    },
+                    {
+                        "group": "s3",
+                        "count": 1,
+                        "highest_severity": "medium",
+                        "items": [{"rule": "s3-no-lifecycle"}],
+                    },
+                ],
+            },
+            report_profile="executive",
+        )
+
+    def test_markdown_names_contextual_groups_and_omits_unscored_priority(self) -> None:
+        from bluearch_aws_steward.reports import render_report
+
+        rendered = str(render_report(self._model(), "markdown"))
+
+        self.assertIn("`lambda` — 3 resource(s)", rendered)
+        self.assertIn("`s3` — 1 resource(s)", rendered)
+        self.assertNotIn("`None`", rendered)
+        self.assertNotIn("priority 0", rendered)
+
+    def test_html_names_contextual_groups_and_omits_unscored_priority(self) -> None:
+        from bluearch_aws_steward.reports import _grouped_html
+
+        rendered = _grouped_html(self._model())
+
+        self.assertIn("<td>lambda</td>", rendered)
+        self.assertIn("<td>3</td>", rendered)
+        self.assertNotIn("None", rendered)
+        self.assertNotIn("<th>Priority</th>", rendered)
+
+    def test_pdf_names_contextual_groups_and_omits_unscored_priority(self) -> None:
+        from bluearch_aws_steward.pdf_report import _grouped_summary, _styles
+
+        texts = [
+            element.text
+            for element in _grouped_summary(self._model(), _styles())
+            if hasattr(element, "text")
+        ]
+
+        self.assertIn("lambda — 3 resource(s)", texts)
+        self.assertIn("s3 — 1 resource(s)", texts)
+        self.assertFalse([text for text in texts if "None" in text or "priority 0" in text])
+
+    def test_solution_card_groups_still_render_their_priority(self) -> None:
+        from bluearch_aws_steward.reports import _grouped_html, _grouped_markdown
+
+        model = {
+            "grouped_solutions": [
+                {"rule": "s3-public-bucket", "resources": 4, "priority_score": 71.0}
+            ]
+        }
+
+        markdown = "\n".join(_grouped_markdown(model))
+        self.assertIn("`s3-public-bucket` — 4 resource(s), priority 71.0", markdown)
+        self.assertIn("<td>71.0</td>", _grouped_html(model))
+
+    def test_pdf_grouped_section_starts_on_its_own_page(self) -> None:
+        from reportlab.platypus import PageBreak
+
+        from bluearch_aws_steward.pdf_report import _grouped_summary, _styles
+
+        story = _grouped_summary(self._model(), _styles())
+
+        # Without a page break the rollup collides with the coverage table.
+        self.assertTrue(story)
+        self.assertIsInstance(story[0], PageBreak)
+
+
 if __name__ == "__main__":
     unittest.main()
