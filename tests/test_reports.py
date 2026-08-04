@@ -283,6 +283,22 @@ class ReportProfileTests(unittest.TestCase):
         )
         self.assertLess(len(executive), len(technical))
 
+    def test_pdf_renders_the_grouped_section(self) -> None:
+        import copy
+
+        from bluearch_aws_steward.pdf_report import render_pdf_report
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="executive")
+        self.assertTrue(model["grouped_solutions"])
+        with_groups = render_pdf_report(model)
+
+        without = copy.deepcopy(model)
+        without["grouped_solutions"] = []
+        without_groups = render_pdf_report(without)
+
+        self.assertGreater(len(with_groups), len(without_groups))
+
 
 if __name__ == "__main__":
     unittest.main()
