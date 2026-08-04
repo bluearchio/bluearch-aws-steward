@@ -68,6 +68,7 @@ from bluearch_aws_steward.recommendation_queue import (
     NATIVE_SOURCE,
     annotate_validation,
     consolidate_scan_results,
+    priority_score,
     recommendation_fingerprint,
 )
 from bluearch_aws_steward.remediation import (
@@ -5643,6 +5644,8 @@ def _tool_find_opportunities(
         for finding in findings
         if _finding_matches_objective(finding, objective)
     ]
+    for opportunity in opportunities:
+        opportunity["priority"] = priority_score(opportunity)
     opportunities.sort(key=_opportunity_sort_key)
 
     resources = sorted({opportunity["resource"] for opportunity in opportunities})
