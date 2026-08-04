@@ -187,5 +187,58 @@ class PdfCountFieldTests(unittest.TestCase):
         self.assertTrue(pdf.startswith(b"%PDF-"))
 
 
+class ReportProfileTests(unittest.TestCase):
+    def _result(self) -> dict:
+        opportunities = [
+            {
+                "rule": f"rule-{index:03d}",
+                "service": "s3",
+                "resource": f"s3://bucket-{index}",
+                "severity": "low",
+                "priority": {"score": float(index)},
+            }
+            for index in range(40)
+        ]
+        return {
+            "observed_at": "2026-08-04T00:00:00Z",
+            "provider": "aws-sdk",
+            "summary": {"resources_scanned": 40},
+            "complete_opportunities": opportunities,
+            "grouped_solutions": [
+                {"rule": "rule-039", "resources": 1, "priority_score": 39.0},
+                {"rule": "rule-000", "resources": 39, "priority_score": 0.0},
+            ],
+        }
+
+    def test_executive_profile_limits_findings_to_ten(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="executive")
+        self.assertEqual(len(model["findings"]), 10)
+
+    def test_executive_profile_keeps_the_highest_priority_findings(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="executive")
+        scores = [item["priority_score"] for item in model["findings"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        self.assertEqual(scores[0], 39.0)
+
+    def test_technical_profile_keeps_every_finding(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="technical")
+        self.assertEqual(len(model["findings"]), 40)
+
+    def test_grouped_solutions_reach_the_model_already_ranked(self) -> None:
+        from bluearch_aws_steward.reports import build_report_model
+
+        model = build_report_model(self._result(), report_profile="executive")
+        self.assertEqual(len(model["grouped_solutions"]), 2)
+        scores = [group["priority_score"] for group in model["grouped_solutions"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        self.assertEqual(model["grouped_solutions"][0]["rule"], "rule-039")
+
+
 if __name__ == "__main__":
     unittest.main()

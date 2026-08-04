@@ -22,6 +22,7 @@ from bluearch_aws_steward.result_query import (
 JSON = Dict[str, Any]
 RenderedReport = str | bytes
 REPORT_FORMATS = ("json", "markdown", "html", "csv", "sarif", "pdf")
+EXECUTIVE_FINDING_LIMIT = 10
 
 
 def build_report_model(
@@ -45,6 +46,11 @@ def build_report_model(
     raw_items = filtered_items if include_all_findings else filtered_items[:100]
     rule_lookup = {rule_key: rule for rule in load_rules() for rule_key in (rule.short_id, rule.id)}
     items = [_normalize_report_finding(item, rule_lookup) for item in raw_items]
+    if report_profile == "executive":
+        items = sorted(
+            items,
+            key=lambda item: -float(item.get("priority_score") or 0.0),
+        )[:EXECUTIVE_FINDING_LIMIT]
     resource_context: JSON = {}
     for item in items:
         candidate = item.get("resource_ref")
@@ -72,6 +78,10 @@ def build_report_model(
         "schema_version": "report-0.1",
         "report_type": "bluearch-aws-steward-assessment",
         "report_profile": report_profile,
+        "grouped_solutions": sorted(
+            deepcopy_json(result.get("grouped_solutions") or []),
+            key=lambda group: -float(group.get("priority_score") or 0.0),
+        ),
         "generated_at": result.get("observed_at") or result.get("generated_at"),
         "provider": result.get("provider") or resource_context.get("provider"),
         "profile": result.get("profile"),
