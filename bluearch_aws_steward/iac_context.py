@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from bluearch_aws_steward.models import ResourceRef, utc_now_iso
 
@@ -404,8 +404,13 @@ def _construct_intrinsic(loader: yaml.SafeLoader, suffix: str, node: yaml.Node) 
         value: Any = loader.construct_scalar(node)
     elif isinstance(node, yaml.SequenceNode):
         value = loader.construct_sequence(node)
-    else:
+    elif isinstance(node, yaml.MappingNode):
         value = loader.construct_mapping(node)
+    else:
+        # YAML defines exactly these three node kinds, so this is unreachable.
+        # It is spelled out because the previous `else` handed an unnarrowed
+        # Node to construct_mapping, which accepts only a MappingNode.
+        value = None
     return {f"Fn::{suffix}": value}
 
 
