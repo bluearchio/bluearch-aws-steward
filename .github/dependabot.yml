@@ -4,9 +4,32 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 1
+    # Steward is published to PyPI, so a raised floor is not free: it narrows the
+    # environments that can install it in exchange for nothing. The default,
+    # `auto`, classified this repo as an application and therefore raised the
+    # lower bound on every bump. `increase-if-necessary` leaves a constraint
+    # alone whenever the lockfile can already satisfy the new version, so
+    # pyproject.toml only changes when a version genuinely does not fit.
+    versioning-strategy: increase-if-necessary
+    # One PR per group, so runtime and dev updates can be open at the same time.
+    open-pull-requests-limit: 2
     groups:
-      python-dependencies:
+      # Never shipped to users. A ceiling change here is cheap to accept.
+      dev-dependencies:
+        patterns:
+          - bandit*
+          - build
+          - defusedxml
+          - detect-secrets
+          - mypy
+          - pip-audit
+          - ruff
+          - twine
+      # Everything else ships in the wheel, including the tui extra. Grouped
+      # separately because these need real review — python-hcl2 8 parses valid
+      # Terraform as zero resources, and textual is pinned below 1.0 because the
+      # TUI has no test coverage that could detect a break.
+      runtime-dependencies:
         patterns: ["*"]
     labels: [dependencies]
   - package-ecosystem: github-actions
