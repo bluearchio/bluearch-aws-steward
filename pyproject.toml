@@ -46,6 +46,11 @@ dev = [
     "pip-audit>=2.7,<3",
     "ruff>=0.9,<1",
     "twine>=5,<8",
+    # Types for the one untyped import, so the same source satisfies both mypy
+    # 1.x and 2.x. Without stubs the two versions disagree about whether the
+    # suppression on that import is needed, and warn_unused_ignores makes the
+    # disagreement fatal in whichever version is not the pinned one.
+    "types-PyYAML>=6,<7",
 ]
 
 [project.scripts]
@@ -69,7 +74,12 @@ bluearch_aws_steward = ["catalog/*.json", "knowledge/*.json"]
 [tool.ruff]
 target-version = "py39"
 line-length = 100
-extend-exclude = ["build", "dist", ".venv"]
+# Markdown is excluded because ruff 0.16 began formatting Python blocks inside
+# it, and the blocks in docs/ are deliberately fragments. A snippet meant to be
+# pasted into a list -- `("Service errors", _count(...)),` -- is not valid
+# standalone Python, so ruff reparsed it as a one-tuple and rewrote the
+# document into something that no longer says what it meant.
+extend-exclude = ["build", "dist", ".venv", "*.md"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "B"]
