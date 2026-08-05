@@ -260,6 +260,14 @@ def _detect_format(path: Path, requested_format: str) -> str:
 
 
 def _parse_terraform(path: Path, root: Path) -> Tuple[List[JSON], List[JSON]]:
+    # The python-hcl2 <8 ceiling in pyproject.toml is load-bearing. Version 8
+    # keeps quotes on string literals and tags blocks with __is_block__, so
+    # every resource type arrives as '"aws_s3_bucket"' and matches nothing.
+    # Its strip_string_quotes option looks like the fix but is worse: it also
+    # strips quotes inside interpolation expressions, turning
+    # jsonencode({Action = "*"}) into Action = *, which silently stops the
+    # wildcard-admin IAM rule from firing. Adopting 8 needs a normalization
+    # layer that separates literals from expressions, not a version bump.
     try:
         import hcl2
     except ModuleNotFoundError as exc:
