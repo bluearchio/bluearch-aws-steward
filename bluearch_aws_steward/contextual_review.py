@@ -1013,6 +1013,16 @@ def _focus_from_prompt(prompt: str, arguments: JSON) -> Optional[ResourceRef]:
         "dynamodb": r"\b(?:dynamodb\s+)?table\s+(?:named\s+)?[`'\"]?([A-Za-z0-9_.-]+)",
         "sqs": r"\b(?:sqs\s+)?queue\s+(?:named\s+)?[`'\"]?([A-Za-z0-9_-]+)",
         "sns": r"\b(?:sns\s+)?topic\s+(?:named\s+)?[`'\"]?([A-Za-z0-9_-]+)",
+        "ec2": r"\b(?:ec2\s+)?instance\s+(?:named\s+)?[`'\"]?(i-[0-9a-f]+|[A-Za-z0-9._-]+)",
+        "efs": r"\b(?:efs\s+)?file\s*system\s+(?:named\s+)?[`'\"]?(fs-[0-9a-f]+|[A-Za-z0-9._-]+)",
+        "kms": r"\b(?:kms\s+)?key\s+(?:named\s+|alias\s+)?[`'\"]?(alias/[A-Za-z0-9/_-]+|[A-Za-z0-9-]+)",
+        "ecs": r"\b(?:ecs\s+)?(?:service|task\s+definition|cluster)\s+(?:named\s+)?[`'\"]?([A-Za-z0-9._-]+)",
+        "alb": r"\b(?:application\s+|alb\s+)?load\s*balancer\s+(?:named\s+)?[`'\"]?([A-Za-z0-9._-]+)",
+        "api-gateway": r"\b(?:rest\s+|http\s+)?api\s+(?:named\s+)?[`'\"]?([A-Za-z0-9._-]+)",
+        "cloudtrail": r"\b(?:cloudtrail\s+)?trail\s+(?:named\s+)?[`'\"]?([A-Za-z0-9._-]+)",
+        "cloudwatch": r"\blog\s*group\s+(?:named\s+)?[`'\"]?([A-Za-z0-9._/-]+)",
+        "iam": r"\b(?:iam\s+)?(?:role|user|policy|group)\s+(?:named\s+)?[`'\"]?([A-Za-z0-9._+=,@-]+)",
+        "secrets-manager": r"\bsecret\s+(?:named\s+)?[`'\"]?([A-Za-z0-9._/+=@-]+)",
     }
     match = re.search(patterns.get(service, r"$^"), prompt, re.IGNORECASE)
     if not match:
