@@ -38,14 +38,14 @@ eks = []
 
 [dependency-groups]
 dev = [
-    "bandit[toml]>=1.8.6,<2",
+    "bandit[toml]>=1.9.4,<2",
     "build>=1.2,<2",
     "defusedxml>=0.7,<1",
     "detect-secrets>=1.5,<2",
-    "mypy>=1.10,<3",
+    "mypy>=2.3.0,<3",
     "pip-audit>=2.7,<3",
-    "ruff>=0.9,<1",
-    "twine>=5,<8",
+    "ruff>=0.16.1,<1",
+    "twine>=7.0.0,<8",
 ]
 
 [project.scripts]
