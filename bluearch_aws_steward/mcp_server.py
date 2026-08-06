@@ -2508,47 +2508,58 @@ def _explicit_objectives_from_prompt(prompt: str) -> List[str]:
     return [explicit] if explicit else []
 
 
+OBJECTIVE_PROMPT_TOKENS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    ("cost_optimization", ("cost", "saving", "savings", "waste", "finops", "cheap", "spend")),
+    (
+        "security",
+        ("security", "secure", "harden", "public", "exposure", "encrypt", "encryption"),
+    ),
+    ("reliability", ("reliability", "reliable", "recover", "recovery", "backup", "restore")),
+    ("operations", ("operation", "operations", "operational", "resilience", "versioning")),
+)
+
+BREADTH_PROMPT_TOKENS: Tuple[str, ...] = (
+    "comprehensive",
+    "everything",
+    "full assessment",
+    "complete assessment",
+    "all rules",
+    "all recommendations",
+    "all misconfigurations",
+    "all findings",
+    "all objectives",
+    "all pillars",
+    "well-architected",
+    "overall posture",
+    "best practices",
+)
+
+
 def _explicit_objective_from_prompt(prompt: str) -> Optional[str]:
+    """Resolve one objective, or "all" when the prompt asks for more than one.
+
+    This used to be a first-match-wins cascade with cost at the top, so any
+    prompt containing the word "cost" resolved to cost_optimization -- including
+    one naming all five pillars, and including one saying "Well-Architected",
+    which is itself a breadth signal that sat below cost and was never reached.
+    On a live account that turned a whole-account request into a 32-rule cost
+    scan returning 79 findings instead of 1428.
+    """
     text = prompt.lower()
-    if any(
-        token in text
-        for token in ["cost", "saving", "savings", "waste", "finops", "cheap", "spend"]
-    ):
-        return "cost_optimization"
-    if any(
-        token in text
-        for token in ["security", "secure", "harden", "public", "exposure", "encrypt", "encryption"]
-    ):
-        return "security"
-    if any(
-        token in text
-        for token in ["reliability", "reliable", "recover", "recovery", "backup", "restore"]
-    ):
-        return "reliability"
-    if any(
-        token in text
-        for token in ["operation", "operations", "operational", "resilience", "versioning"]
-    ):
-        return "operations"
-    if any(
-        token in text
-        for token in [
-            "comprehensive",
-            "everything",
-            "full assessment",
-            "complete assessment",
-            "all rules",
-            "all recommendations",
-            "all misconfigurations",
-            "all findings",
-            "all objectives",
-            "all pillars",
-            "well-architected",
-            "overall posture",
-            "best practices",
-        ]
-    ):
+    if any(token in text for token in BREADTH_PROMPT_TOKENS):
         return "all"
+    matched = [
+        objective
+        for objective, tokens in OBJECTIVE_PROMPT_TOKENS
+        if any(token in text for token in tokens)
+    ]
+    if len(matched) > 1:
+        # Naming several pillars means all of them. Picking the first would
+        # drop the rest silently, which reads as a clean result rather than a
+        # narrowed one.
+        return "all"
+    if matched:
+        return matched[0]
     return None
 
 
