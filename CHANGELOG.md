@@ -7,34 +7,6 @@ as preview are not covered by a stable API compatibility promise.
 
 ## [Unreleased]
 
-### Changed
-
-- Findings are now ranked by contextual risk instead of alphabetically within
-  severity. Contextual risk is a ranking tier of its own: root credentials,
-  publicly reachable resources and internet-exposed administrative ports rank
-  above every finding without contextual risk, whatever its catalog severity or
-  composite score. Delivery order changes for every consumer.
-- The default report profile is now `executive`, which leads with the ten
-  highest-priority findings and the grouped rollup. Request `technical`,
-  `remediation` or `complete` for the previous finding-by-finding output.
-  Summary totals continue to reflect every finding; only the displayed list is
-  capped, and Markdown, HTML and PDF state how many findings they show out of
-  the total. CSV, SARIF and JSON always serialise the complete finding set.
-- All four report profiles now behave differently: `remediation` reports only
-  findings whose remediation Steward supports, and `complete` reports every
-  finding with no caps at all.
-
-### Fixed
-
-- PDF export no longer fails with `TypeError` when a summary reports capability
-  errors, service errors or skipped rules as counts rather than lists.
-- Grouped rollups in Markdown, HTML and PDF reports no longer print `None` and a
-  zero priority for contextual architecture reviews, whose groups use a
-  different shape from native solution-card groups.
-- Contextual risk factors are now detected for raw scan findings, not only for
-  translated opportunities, so the unified recommendation queue no longer holds
-  two contradictory priorities for the same issue.
-
 ## [0.9.0b1] - Preview candidate
 
 ### Added
@@ -54,18 +26,56 @@ as preview are not covered by a stable API compatibility promise.
 - Contextual focus, questions, WAF ledger, excluded scope, read ledger,
   recommendations, and limitations in JSON, CSV, Markdown, HTML, SARIF, and PDF
   reports.
+- Natural-language focus resolution for all 17 runtime scopes. Ten scopes,
+  including EFS, KMS, ECS, IAM, and Secrets Manager, previously required an ARN
+  or scheme URI because plain-language phrasing was refused.
+  Vague and ambiguous prompts are still refused rather than guessed.
 - Golden contextual scenarios and a real stdio MCP LocalEmu gate that prove
   focused collection, no unrelated service reads, complete provenance, and
   zero writes.
 
 ### Changed
 
+- Findings are now ranked by contextual risk instead of alphabetically within
+  severity. Contextual risk is a ranking tier of its own: root credentials,
+  publicly reachable resources and internet-exposed administrative ports rank
+  above every finding without contextual risk, whatever its catalog severity or
+  composite score. Delivery order changes for every consumer.
+- The default report profile is now `executive`, which leads with the ten
+  highest-priority findings and the grouped rollup. Request `technical`,
+  `remediation` or `complete` for the previous finding-by-finding output.
+  Summary totals continue to reflect every finding; only the displayed list is
+  capped, and Markdown, HTML and PDF state how many findings they show out of
+  the total. CSV, SARIF and JSON always serialise the complete finding set.
+- All four report profiles now behave differently: `remediation` reports only
+  findings whose remediation Steward supports, and `complete` reports every
+  finding with no caps at all.
 - Full-account assessment now requires explicit full-scan intent; ambiguous
   prompts return guided focus choices instead of guessing a resource.
 - Assessment objectives influence recommendation ranking but do not suppress a
   confirmed high-impact concern from another Well-Architected pillar.
 - Resource details now include the captured architecture neighborhood and
   contextual Well-Architected practices.
+
+### Fixed
+
+- A prompt naming several Well-Architected pillars is now assessed against all
+  of them. Objective inference returned the first pillar it recognised, so an
+  account-wide request naming five pillars was filtered to cost rules and
+  returned a fraction of the available findings with nothing reporting the
+  narrowing. A prompt naming one pillar still resolves to that pillar.
+- Account-wide reports now name the Region and provider they were observed in,
+  read from the scan's routing record. Markdown and HTML printed `unknown` and
+  CSV left the column empty on every row, in the formats most likely to be
+  filed or ingested elsewhere.
+- PDF export no longer fails with `TypeError` when a summary reports capability
+  errors, service errors or skipped rules as counts rather than lists.
+- Grouped rollups in Markdown, HTML and PDF reports no longer print `None` and a
+  zero priority for contextual architecture reviews, whose groups use a
+  different shape from native solution-card groups.
+- Contextual risk factors are now detected for raw scan findings, not only for
+  translated opportunities, so the unified recommendation queue no longer holds
+  two contradictory priorities for the same issue.
 
 ## [0.8.0b1] - Preview candidate
 

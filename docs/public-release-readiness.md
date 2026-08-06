@@ -60,8 +60,8 @@ and a reviewed support and security process.
 - [x] Add a validation-only release-candidate pipeline.
 - [x] Add tag-only TestPyPI and release-approved PyPI Trusted Publishing without stored tokens.
 - [x] Add safe MCP registration for Codex, Cursor, and Claude Code.
-- [ ] Reserve the PyPI project and configure pending Trusted Publishers.
-- [ ] Test a prerelease through TestPyPI.
+- [x] Reserve the PyPI project and configure pending Trusted Publishers.
+- [x] Test a prerelease through TestPyPI.
 - [ ] Validate install, upgrade, and uninstall on macOS and Linux.
 - [ ] Add package provenance/SBOM and signed release attestations.
 
@@ -102,7 +102,7 @@ Remote evidence for the clean preview repository:
 - [x] Bound contextual traversal to 25 graph nodes and 50 deduplicated reads.
 - [x] Include evidence provenance, excluded scope, unknowns, and limitations.
 - [x] Prove through LocalEmu that an S3 review does not collect unrelated EC2 or RDS data.
-- [ ] Return an executive summary and bounded top-action queue by default.
+- [x] Return an executive summary and bounded top-action queue by default.
 - [ ] Add facets for objective, service, severity, source, confidence, effort,
   owner, remediation safety, and freshness.
 - [ ] Explain every priority score and show why an item should be handled now.
