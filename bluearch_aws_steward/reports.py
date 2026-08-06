@@ -55,6 +55,11 @@ def build_report_model(
         if isinstance(candidate, dict):
             resource_context = dict(candidate)
             break
+    # An account-wide assessment has no top-level region and no region on any
+    # resource_ref, so without this the report claimed it was observed nowhere.
+    # The routing block is where the scan recorded what it actually ran against.
+    routing_candidate = result.get("routing")
+    routing: JSON = routing_candidate if isinstance(routing_candidate, dict) else {}
     severity_counts = Counter(str(item.get("severity") or "unknown").lower() for item in items)
     service_counts = Counter(str(item.get("service") or "unknown") for item in items)
     rule_counts = Counter(
@@ -92,10 +97,12 @@ def build_report_model(
             key=lambda group: -float(group.get("priority_score") or 0.0),
         ),
         "generated_at": result.get("observed_at") or result.get("generated_at"),
-        "provider": result.get("provider") or resource_context.get("provider"),
+        "provider": result.get("provider")
+        or resource_context.get("provider")
+        or routing.get("provider"),
         "profile": result.get("profile"),
         "account_id": result.get("account_id") or resource_context.get("account_id"),
-        "region": result.get("region") or resource_context.get("region"),
+        "region": result.get("region") or resource_context.get("region") or routing.get("region"),
         "service": result.get("service"),
         "assessment_mode": result.get("assessment_mode"),
         "operation": result.get("operation"),
