@@ -1,8 +1,11 @@
 # Publishing The Preview
 
-This runbook publishes an immutable Python preview while the GitHub repository
-may remain private. The wheel and source distribution published to PyPI are
-public and contain the packaged Python source.
+This runbook publishes an immutable Python preview to PyPI. The wheel and
+source distribution are public and contain the packaged Python source.
+
+Substitute the version being published for `<version>` throughout, for example
+`0.9.0b2`. The tag is always `v<version>` and the workflows refuse to publish
+unless it matches `bluearch_aws_steward.__version__` exactly.
 
 ## Safety Properties
 
@@ -16,6 +19,9 @@ public and contain the packaged Python source.
 - Existing PyPI versions are never overwritten or silently skipped.
 
 ## One-Time PyPI Configuration
+
+Both Trusted Publishers are already configured for `bluearch-aws-steward`. This
+section applies to a new project, a revoked publisher, or a rename.
 
 Create accounts on both [PyPI](https://pypi.org/) and
 [TestPyPI](https://test.pypi.org/). The account databases are separate.
@@ -34,15 +40,19 @@ Do not create a PyPI API token for this workflow.
 
 ## Approval Boundary
 
-Private repositories on the current GitHub plan do not provide environment
-reviewer protection. The release therefore uses a durable draft-release gate
-instead of silently weakening approval.
+No tag push can reach PyPI on its own. `release.yml` publishes only to TestPyPI
+and creates a draft prerelease; it has no PyPI identity. `publish-pypi.yml` runs
+only for a published prerelease, revalidates the tag against `main`, verifies
+every asset checksum, and then uses its own PyPI Trusted Publisher identity.
+Publishing the draft is the approval. Do not add package or AWS credentials to
+either workflow.
 
-`release.yml` can publish only to TestPyPI and creates a draft prerelease. It
-cannot publish to PyPI. `publish-pypi.yml` runs only for a published prerelease,
-revalidates the tag against `main`, verifies every asset checksum, and then uses
-its own PyPI Trusted Publisher identity. Do not add package or AWS credentials
-to either workflow.
+The draft gate was chosen because environment reviewer protection was
+unavailable to private repositories on the plan in use at the time. This
+repository is now public, so protected environments are available and would
+move the approval into GitHub's own audited review flow instead of resting on
+the draft state. The draft gate remains sound on its own; treat the environment
+as a strengthening step rather than a correction.
 
 ## Candidate Validation
 
@@ -65,15 +75,15 @@ Run the manual `Release candidate validation` workflow on the same commit. Do
 not create the release tag until CI, CodeQL, LocalEmu MCP E2E, and the release
 candidate workflow are green.
 
-## Publish `0.9.0b1`
+## Publish `<version>`
 
 Create an annotated tag from the validated `main` commit. Preview tags may be
 unsigned because publishing is bound to this repository and workflow through
 OIDC. Require a verified signed tag before publishing a stable release:
 
 ```bash
-git tag -a v0.9.0b1 -m "BlueArch AWS Steward 0.9.0b1"
-git push origin v0.9.0b1
+git tag -a "v<version>" -m "BlueArch AWS Steward <version>"
+git push origin "v<version>"
 ```
 
 The workflow will:
@@ -95,16 +105,26 @@ Use a machine or container without the repository checkout:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install 'bluearch-aws-steward==0.9.0b1'
+python -m pip install "bluearch-aws-steward==<version>"
 bluearch-steward --version
 bluearch-steward mcp smoke
 python -c "import kubernetes"
 bluearch-steward mcp install --client cursor --runtime installed --dry-run
 deactivate
 
-uv tool install 'bluearch-aws-steward==0.9.0b1'
+uv tool install "bluearch-aws-steward==<version>"
 bluearch-steward mcp smoke
 uv tool uninstall bluearch-aws-steward
+```
+
+PyPI's project-level JSON API is CDN-cached and can report the previous version
+as latest for a few minutes after upload. The simple index and the per-version
+endpoint update immediately, so confirm there rather than concluding the upload
+failed:
+
+```bash
+curl -s -H "Accept: application/vnd.pypi.simple.v1+json" \
+  https://pypi.org/simple/bluearch-aws-steward/ | grep "<version>"
 ```
 
 Then install the package normally and register the user's preferred client as
@@ -120,7 +140,7 @@ If a published preview is broken:
 1. yank the affected PyPI release;
 2. document the reason in the changelog and GitHub release;
 3. fix and validate the issue on `main`; and
-4. publish the next preview, such as `0.7.0b5`.
+4. publish the next preview.
 
 Yanking discourages new automatic installations but does not remove files that
 existing users may already have downloaded.
