@@ -125,6 +125,15 @@ EXECUTABLE_S3_RULES: Dict[str, ExecutableRuleMapping] = {
         safety_level="review_required",
         risk_detail="security, operations",
     ),
+    "c7db823b-24c5-4033-a01e-fa2345106f9e": ExecutableRuleMapping(
+        source_id="c7db823b-24c5-4033-a01e-fa2345106f9e",
+        short_id="s3-policy-public-read",
+        detector="s3_policy_public_read",
+        scenario="S3 bucket policy allows read actions to a public principal",
+        remediation_summary="Remove or narrowly scope public read statements in the bucket policy.",
+        safety_level="review_required",
+        risk_detail="security, operations",
+    ),
     "ce620d59-96ae-4465-b6cf-6262e9e5f403": ExecutableRuleMapping(
         source_id="ce620d59-96ae-4465-b6cf-6262e9e5f403",
         short_id="s3-tls-enforcement-missing",

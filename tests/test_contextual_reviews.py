@@ -154,11 +154,11 @@ class KnowledgePackTests(unittest.TestCase):
         manifest = validate_knowledge_packs()
 
         self.assertEqual(manifest["runtime_scope_count"], 17)
-        self.assertEqual(manifest["native_rule_count"], 120)
-        self.assertEqual(len(manifest["rule_mappings"]), 120)
+        self.assertEqual(manifest["native_rule_count"], 121)
+        self.assertEqual(len(manifest["rule_mappings"]), 121)
         self.assertEqual(
             manifest["mapped_native_rules"] + manifest["intentionally_unmapped_native_rules"],
-            120,
+            121,
         )
         self.assertGreaterEqual(manifest["waf_catalog_row_count"], 298)
         self.assertTrue(manifest["catalog_revision"].startswith("sha256:"))

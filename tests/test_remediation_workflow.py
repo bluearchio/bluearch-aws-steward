@@ -80,6 +80,48 @@ class MutableAwsProvider:
             raise AssertionError(f"expected {expected!r}, got {actual!r}")
 
 
+class PublicBucketProvider(MutableAwsProvider):
+    """Public-read bucket policy with an incomplete public access block."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.public_access_block = {
+            "BlockPublicAcls": False,
+            "IgnorePublicAcls": False,
+            "BlockPublicPolicy": False,
+            "RestrictPublicBuckets": False,
+        }
+
+    def get_public_access_block(self, bucket: str) -> Dict[str, Any]:
+        self._expect(bucket, "demo-bucket")
+        return dict(self.public_access_block)
+
+    def get_bucket_policy(self, bucket: str) -> Optional[Dict[str, Any]]:
+        self._expect(bucket, "demo-bucket")
+        return {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "AnonymousRead",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": "s3:GetObject",
+                    "Resource": "arn:aws:s3:::demo-bucket/*",
+                }
+            ],
+        }
+
+    def put_public_access_block(self, bucket: str) -> None:
+        self._expect(bucket, "demo-bucket")
+        self.writes.append(("s3:PutPublicAccessBlock", bucket))
+        self.public_access_block = {
+            "BlockPublicAcls": True,
+            "IgnorePublicAcls": True,
+            "BlockPublicPolicy": True,
+            "RestrictPublicBuckets": True,
+        }
+
+
 class LoggingAwsProvider(MutableAwsProvider):
     def __init__(self) -> None:
         super().__init__()
@@ -340,6 +382,40 @@ class GuardedRemediationWorkflowTests(unittest.TestCase):
             },
         )
         self.assertIn("already applied", replay_error)
+
+    def test_s3_public_bucket_apply_reports_residual_public_policy(self) -> None:
+        provider = PublicBucketProvider()
+        finding = (
+            scan_s3(
+                provider,
+                profile="test-sso",
+                endpoint_url=None,
+                region="us-east-1",
+                provider="aws-sdk",
+                rule_filter="s3-public-bucket",
+            )
+            .findings[0]
+            .to_dict()
+        )
+        server = _server(provider)
+        planned = _call(server, "bluearch_plan_remediation", {"finding": finding})
+
+        applied = _call(
+            server,
+            "bluearch_apply_remediation",
+            {
+                "plan_id": planned["plan_id"],
+                "plan_digest": planned["plan_digest"],
+                "allow_write": True,
+            },
+        )
+
+        self.assertEqual(applied["status"], "applied_with_residual_risk")
+        self.assertTrue(applied["write_actions_applied"])
+        self.assertEqual(provider.writes, [("s3:PutPublicAccessBlock", "demo-bucket")])
+        residual_rules = {item["rule"] for item in applied["residual_risks"]}
+        self.assertIn("s3-policy-public-read", residual_rules)
+        self.assertIn("bucket policy", applied["message"])
 
     def test_changed_live_state_invalidates_plan_without_writing(self) -> None:
         provider = MutableAwsProvider()

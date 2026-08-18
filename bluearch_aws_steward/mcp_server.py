@@ -80,6 +80,7 @@ from bluearch_aws_steward.remediation import (
     evidence_digest,
     execute_remediation_plan,
     is_apply_supported,
+    residual_risk_rules,
     validate_logging_destination,
 )
 from bluearch_aws_steward.reports import (
@@ -1158,12 +1159,33 @@ class StewardMcpServer:
             }
 
         verified = remaining is None
+        residual = self._residual_risk_findings(finding, prepared, client) if verified else []
         self._remediation_plans.mark_completed(
             plan["plan_id"],
             "applied" if verified else "applied_unverified",
         )
+        if not verified:
+            status = "applied_unverified"
+            message = (
+                "The write completed, but the finding still matches. "
+                "Review the live evidence before retrying."
+            )
+        elif residual:
+            status = "applied_with_residual_risk"
+            residual_details = "; ".join(
+                str(item.get("scenario") or item.get("rule") or "unknown exposure")
+                for item in residual
+            )
+            message = (
+                "The write completed and the original finding is gone, but this resource "
+                f"is not safe yet: {residual_details}. Review residual_risks and correct "
+                "them before treating the resource as remediated."
+            )
+        else:
+            status = "applied"
+            message = "Remediation was applied and a fresh AWS read confirmed the finding is gone."
         return {
-            "status": "applied" if verified else "applied_unverified",
+            "status": status,
             "verified": verified,
             "write_actions_applied": True,
             "plan_id": plan["plan_id"],
@@ -1172,11 +1194,8 @@ class StewardMcpServer:
             "actions": actions,
             "observed_at": verification_scan.get("generated_at"),
             "remaining_finding": remaining,
-            "message": (
-                "Remediation was applied and a fresh AWS read confirmed the finding is gone."
-                if verified
-                else "The write completed, but the finding still matches. Review the live evidence before retrying."
-            ),
+            "residual_risks": residual,
+            "message": message,
         }
 
     def _scan_live_finding(
@@ -1185,6 +1204,7 @@ class StewardMcpServer:
         arguments: JSON,
         *,
         client: Optional[AwsProvider] = None,
+        rule_filter_override: Optional[str] = None,
     ) -> Tuple[Optional[JSON], JSON, AwsProvider]:
         service = str(finding.get("service") or "")
         rule = str(finding.get("rule_short_id") or "")
@@ -1202,7 +1222,7 @@ class StewardMcpServer:
                 region=arguments.get("region") or "us-east-1",
                 provider=_provider_name(arguments),
                 bucket_prefix=bucket_prefix,
-                rule_filter=rule,
+                rule_filter=rule_filter_override or rule,
                 policy=build_scan_policy(
                     ebs_min_unattached_days=arguments.get("ebs_min_unattached_days"),
                     cloudwatch_retention_days=arguments.get("cloudwatch_retention_days"),
@@ -1239,6 +1259,46 @@ class StewardMcpServer:
             None,
         )
         return live, payload, selected_client
+
+    def _residual_risk_findings(
+        self,
+        finding: JSON,
+        arguments: JSON,
+        client: AwsProvider,
+    ) -> List[JSON]:
+        rules = residual_risk_rules(finding)
+        if not rules:
+            return []
+        resource = str(finding.get("resource") or "")
+        try:
+            _, payload, _ = self._scan_live_finding(
+                finding,
+                arguments,
+                client=client,
+                rule_filter_override=",".join(rules),
+            )
+        except (AwsProviderError, McpToolError) as exc:
+            return [
+                {
+                    "rule": None,
+                    "resource": resource,
+                    "severity": "unknown",
+                    "scenario": (
+                        "Steward could not evaluate residual exposure after the write: "
+                        f"{exc}. Re-scan this resource before treating it as safe."
+                    ),
+                }
+            ]
+        return [
+            {
+                "rule": candidate.get("rule_short_id"),
+                "resource": candidate.get("resource"),
+                "severity": candidate.get("severity"),
+                "scenario": candidate.get("scenario"),
+            }
+            for candidate in payload.get("findings") or []
+            if candidate.get("resource") == resource
+        ]
 
     def _arguments_for_remediation_plan(self, arguments: JSON, plan: JSON) -> JSON:
         expected = plan.get("aws_context") or {}

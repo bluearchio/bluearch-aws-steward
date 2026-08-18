@@ -87,7 +87,7 @@ Use an explicit prompt only when you really need breadth:
 
 ## Included In This Preview
 
-- 120 native rules across 17 AWS runtime scopes.
+- 121 native rules across 17 AWS runtime scopes.
 - Versioned contextual knowledge packs for all 17 scopes and bounded typed
   relationship collection with a 50-read operation budget.
 - Safe Terraform HCL, Terraform plan JSON, and CloudFormation JSON/YAML review.
