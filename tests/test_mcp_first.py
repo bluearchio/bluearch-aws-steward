@@ -941,12 +941,12 @@ class McpFirstWorkflowTests(unittest.TestCase):
         self.assertTrue(status["mcp_first"])
         self.assertEqual(status["default_provider"], "aws-sdk")
         self.assertFalse(status["state"]["persistent_inventory"])
-        self.assertEqual(coverage["rule_count"], 120)
-        self.assertEqual(coverage["catalog_rule_count"], 649)
-        self.assertEqual(coverage["automated_rule_count"], 120)
+        self.assertEqual(coverage["rule_count"], 121)
+        self.assertEqual(coverage["catalog_rule_count"], 650)
+        self.assertEqual(coverage["automated_rule_count"], 121)
         self.assertEqual(coverage["unevaluated_rule_count"], 529)
         self.assertEqual(coverage["rules_by_evaluation_mode"]["manual_review"], 117)
-        self.assertEqual(status["coverage"]["catalog_rules"], 649)
+        self.assertEqual(status["coverage"]["catalog_rules"], 650)
         self.assertEqual(
             {service["service"] for service in coverage["services"]},
             {

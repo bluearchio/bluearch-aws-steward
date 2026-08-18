@@ -13,20 +13,20 @@ class CatalogRegistryTests(unittest.TestCase):
     def test_bundled_registry_contains_every_source_rule(self) -> None:
         rules = load_catalog_rules()
 
-        self.assertEqual(len(rules), 649)
-        self.assertEqual(len({rule["id"] for rule in rules}), 649)
+        self.assertEqual(len(rules), 650)
+        self.assertEqual(len({rule["id"] for rule in rules}), 650)
         self.assertTrue(all(rule.get("evaluation") for rule in rules))
 
     def test_registry_exposes_honest_evaluation_modes(self) -> None:
         coverage = catalog_coverage()
 
-        self.assertEqual(coverage["catalog_rule_count"], 649)
-        self.assertEqual(coverage["automated_rule_count"], 120)
+        self.assertEqual(coverage["catalog_rule_count"], 650)
+        self.assertEqual(coverage["automated_rule_count"], 121)
         self.assertEqual(coverage["unevaluated_rule_count"], 529)
         self.assertEqual(
             coverage["rules_by_evaluation_mode"],
             {
-                "native": 120,
+                "native": 121,
                 "native_alias": 7,
                 "manual_review": 117,
                 "metadata_required": 191,
@@ -45,7 +45,7 @@ class CatalogRegistryTests(unittest.TestCase):
     def test_automated_filter_returns_only_native_rules(self) -> None:
         rules = search_catalog_rules(automated_only=True)
 
-        self.assertEqual(len(rules), 120)
+        self.assertEqual(len(rules), 121)
         self.assertTrue(all(rule["evaluation"]["mode"] == "native" for rule in rules))
         self.assertTrue(
             all(rule["evaluation"].get("access_tier") in {"free", "premium"} for rule in rules)
@@ -55,7 +55,7 @@ class CatalogRegistryTests(unittest.TestCase):
         rules = search_catalog_rules(automated_only=True)
         free_rules = [rule for rule in rules if rule["evaluation"].get("access_tier") == "free"]
 
-        self.assertEqual(len(free_rules), 120)
+        self.assertEqual(len(free_rules), 121)
         self.assertGreaterEqual(len(rules), len(free_rules))
 
 

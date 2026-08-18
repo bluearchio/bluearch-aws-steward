@@ -18,8 +18,8 @@ telemetry, or a local AWS inventory database. AWS remains the source of truth.
   relationships, explicit unknowns, excluded scope, and a complete read ledger.
 - Validated Well-Architected knowledge packs for all 17 executable scopes,
   backed by the bundled `aws-misconfig-db` catalog.
-- 120 native rules across 17 runtime scopes, including a 20-rule EKS/Kubernetes pack.
-- Searchable knowledge for all 649 `aws-misconfig-db` catalog entries.
+- 121 native rules across 17 runtime scopes, including a 20-rule EKS/Kubernetes pack.
+- Searchable knowledge for all 650 `aws-misconfig-db` catalog entries.
 - Safe Terraform HCL, Terraform plan JSON, and CloudFormation JSON/YAML review
   without executing plans, transforms, macros, custom resources, or dynamic references.
 - Point-in-time, read-only assessments using user-owned AWS credentials.
@@ -250,7 +250,7 @@ Primary tools:
 | `bluearch_validate_iac_patch` | Validate a generated patch in a temporary directory. | No |
 | `bluearch_get_coverage` | Report catalog and native detector coverage. | No |
 | `bluearch_status` | Check runtime, AWS identity, and rule coverage. | No |
-| `bluearch_rules_search` | Search all 649 catalog rules. | No |
+| `bluearch_rules_search` | Search all 650 catalog rules. | No |
 | `bluearch_explain_finding` | Explain evidence and impact. | No |
 | `bluearch_plan_remediation` | Revalidate and create a short-lived plan. | No |
 | `bluearch_apply_remediation` | Apply an exact approved plan. | Guarded |
@@ -266,8 +266,8 @@ authoritative counts. The current source manifest reports:
 
 | Measure | Current candidate |
 | --- | ---: |
-| Catalog rules | 649 |
-| Native canonical rules | 120 |
+| Catalog rules | 650 |
+| Native canonical rules | 121 |
 | Native aliases | 7 |
 | Runtime scopes | 17 |
 | Catalog automation | 18.49% |
@@ -277,7 +277,7 @@ Runtime scopes are `iam`, `cloudtrail`, `cloudwatch`, `dynamodb`, `s3`, `ec2`,
 `sqs`, and `api-gateway`. The aliases `ebs` and `networking` route to the EC2 collector
 and do not increase the canonical rule count.
 
-All 120 current rules have `access_tier: free`. The original 100-rule AWS pack
+All 121 current rules have `access_tier: free`. The original 100-rule AWS pack
 and the 20-rule EKS/Kubernetes pack are the open-source baseline. Future canonical rules are reserved for a
 `premium` tier unless the project governance explicitly promotes them. v0.7.0
 does not add hosted login, licensing calls, or telemetry; entitlement enforcement

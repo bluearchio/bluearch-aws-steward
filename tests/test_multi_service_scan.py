@@ -493,7 +493,7 @@ class MultiServiceDetectorTests(unittest.TestCase):
 
         self.assertEqual(result.service, "all")
         self.assertEqual(result.summary["resources_scanned"], 11)
-        self.assertEqual(result.summary["rules_evaluated"], 23)
+        self.assertEqual(result.summary["rules_evaluated"], 24)
         self.assertEqual(
             result.summary["services_scanned"],
             [
@@ -524,9 +524,9 @@ class MultiServiceDetectorTests(unittest.TestCase):
         self.assertEqual(progress[-1]["findings_discovered"], 2)
         self.assertEqual(progress[-1]["resources_scanned"], 11)
         coverage = result.summary["detection_coverage"]
-        self.assertEqual(coverage["catalog_rules_in_scope"], 649)
-        self.assertEqual(coverage["automated_rules_available"], 120)
-        self.assertEqual(coverage["automated_rules_evaluated"], 23)
+        self.assertEqual(coverage["catalog_rules_in_scope"], 650)
+        self.assertEqual(coverage["automated_rules_available"], 121)
+        self.assertEqual(coverage["automated_rules_evaluated"], 24)
         self.assertEqual(coverage["unevaluated_catalog_rules"], 626)
         self.assertFalse(coverage["complete_catalog_evaluation"])
 
@@ -582,8 +582,8 @@ class MultiServiceDetectorTests(unittest.TestCase):
         )
         self.assertEqual(result.summary["service_errors"][0]["service"], "cloudwatch")
         coverage = result.summary["detection_coverage"]
-        self.assertEqual(coverage["automated_rules_available"], 120)
-        self.assertEqual(coverage["automated_rules_evaluated"], 22)
+        self.assertEqual(coverage["automated_rules_available"], 121)
+        self.assertEqual(coverage["automated_rules_evaluated"], 23)
         self.assertEqual(coverage["automated_rules_not_evaluated"], 98)
         self.assertFalse(coverage["complete_catalog_evaluation"])
         self.assertEqual(
@@ -626,7 +626,7 @@ class MultiServiceDetectorTests(unittest.TestCase):
             _print_scan_text(payload)
 
         rendered = output.getvalue()
-        self.assertIn("8/24 evaluated; 16 unevaluated", rendered)
+        self.assertIn("9/25 evaluated; 16 unevaluated", rendered)
         self.assertIn("No findings among the evaluated native rules", rendered)
         self.assertNotIn("No findings detected", rendered)
 

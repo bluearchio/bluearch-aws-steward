@@ -295,11 +295,12 @@ def _scan_bucket(
     policy_detector_names = {
         "s3_policy_all_actions_public",
         "s3_policy_public_delete",
+        "s3_policy_public_read",
         "s3_tls_enforcement_missing",
         "s3_cloudtrail_access_logging_disabled",
     }
 
-    if "s3_public_bucket" in rules:
+    if "s3_public_bucket" in rules or "s3_policy_public_read" in rules:
         public_access_block = client.get_public_access_block(bucket)
         public_access_block_complete = _public_access_block_complete(public_access_block)
     else:
@@ -371,6 +372,34 @@ def _scan_bucket(
                         "Validate object retention, lifecycle, and recovery behavior before the change.",
                     ],
                     "Re-read the bucket policy and confirm no public Allow statement grants delete actions.",
+                )
+            )
+
+    public_read_rule = rules.get("s3_policy_public_read")
+    if public_read_rule:
+        matches = [
+            match
+            for match in _public_action_matches(
+                bucket_policy,
+                ("s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"),
+            )
+            if any(action not in ("*", "s3:*") for action in match["actions"])
+        ]
+        if matches:
+            findings.append(
+                _finding(
+                    public_read_rule,
+                    bucket,
+                    {
+                        "public_read_actions": matches,
+                        "public_access_block_complete": public_access_block_complete,
+                    },
+                    [
+                        "Identify whether any consumer legitimately depends on anonymous reads.",
+                        "Remove or narrowly scope the public read statements in the bucket policy.",
+                        "Keep the public access block enabled; a public statement remains a latent exposure even while blocked.",
+                    ],
+                    "Re-read the bucket policy and confirm no public Allow statement grants read access.",
                 )
             )
 

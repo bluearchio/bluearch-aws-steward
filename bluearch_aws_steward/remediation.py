@@ -66,6 +66,11 @@ REMEDIATION_MANIFEST: Dict[str, JSON] = {
             "Bucket policy statements are not removed by this operation and still require review.",
         ],
         "rollback": "Restore the previously captured public access block only after reviewing the bucket policy.",
+        "residual_risk_rules": [
+            "s3-policy-public-read",
+            "s3-policy-all-actions-public",
+            "s3-policy-public-delete",
+        ],
     },
     "s3-no-default-encryption": {
         "read_actions": ["s3:ListAllMyBuckets", "s3:GetEncryptionConfiguration"],
@@ -286,6 +291,16 @@ def is_apply_supported(value: Any) -> bool:
     else:
         rule = value
     return str(rule or "") in REMEDIATION_MANIFEST
+
+
+def residual_risk_rules(value: Any) -> tuple[str, ...]:
+    """Rules that must stay clear after this remediation for the resource to be safe."""
+    if isinstance(value, dict):
+        rule = value.get("rule_short_id") or value.get("rule")
+    else:
+        rule = value
+    manifest = REMEDIATION_MANIFEST.get(str(rule or "")) or {}
+    return tuple(manifest.get("residual_risk_rules") or ())
 
 
 def evidence_digest(finding: JSON) -> str:

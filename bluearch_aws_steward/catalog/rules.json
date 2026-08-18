@@ -2962,6 +2962,26 @@
       "access_tier": "free"
     },
     {
+      "id": "c7db823b-24c5-4033-a01e-fa2345106f9e",
+      "short_id": "s3-policy-public-read",
+      "service": "s3",
+      "scenario": "S3 bucket policy allows read actions to a public principal",
+      "risk_detail": "security, operations",
+      "severity": "high",
+      "detector": "s3_policy_public_read",
+      "remediation": {
+        "summary": "Remove or narrowly scope public read statements in the bucket policy.",
+        "safety_level": "review_required",
+        "requires_approval": true
+      },
+      "parameters": {},
+      "catalog_service": "s3",
+      "capabilities": [],
+      "evaluation_kind": "configuration",
+      "objectives": [],
+      "access_tier": "free"
+    },
+    {
       "id": "356570fe-de33-4782-bc81-152cb144fb05",
       "short_id": "s3-public-bucket",
       "service": "s3",
@@ -3233,7 +3253,7 @@
       "sns",
       "sqs"
     ],
-    "imported_rules": 120,
+    "imported_rules": 121,
     "skipped_unsupported_rules": {
       "alb-elb": 10,
       "api-gateway": 1,

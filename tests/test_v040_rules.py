@@ -684,7 +684,7 @@ class V040RuleTests(unittest.TestCase):
 
         self.assertEqual(
             sum(rule.evaluation_kind == "configuration" for rule in rules),
-            93,
+            94,
         )
         self.assertEqual(sum(rule.evaluation_kind == "signal" for rule in rules), 27)
 

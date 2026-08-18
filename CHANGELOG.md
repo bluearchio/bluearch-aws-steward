@@ -7,6 +7,24 @@ as preview are not covered by a stable API compatibility promise.
 
 ## [Unreleased]
 
+### Added
+
+- New native rule `s3-policy-public-read` (high severity) that flags bucket
+  policies granting read access to a public principal, including when the
+  public access block already blocks the exposure. This closes the detection
+  gap found in benchmark sweep-2026-08-12, where a public-read policy became
+  invisible to every S3 rule once the public access block was enabled.
+
+### Changed
+
+- `bluearch_apply_remediation` now performs an outcome check after the write.
+  When the applied change removes the original finding but a mapped residual
+  exposure remains (for `s3-public-bucket`: the bucket policy still grants
+  public access), the response status is `applied_with_residual_risk` with a
+  `residual_risks` list instead of an unqualified "verified clean" signal.
+  Benchmark trials showed agents rationally trusted the previous
+  false-positive completion message and stopped before the resource was safe.
+
 ## [0.9.0b1] - Preview candidate
 
 ### Added

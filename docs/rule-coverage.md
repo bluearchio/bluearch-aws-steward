@@ -1,9 +1,9 @@
 # Native Rule Coverage
 
-BlueArch AWS Steward v0.9.0b1 contains 120 canonical native rules across 17
+BlueArch AWS Steward contains 121 canonical native rules across 17
 runtime scopes. Aliases are routing conveniences and do not increase this
-count. The complete knowledge catalog contains 649 entries; therefore native
-automation coverage is 18.49%. All 120 rules are in the open-source `free`
+count. The complete knowledge catalog contains 650 entries; therefore native
+automation coverage is 18.62%. All 121 rules are in the open-source `free`
 access tier; future canonical additions after this baseline default to
 `premium` unless project governance promotes them.
 
