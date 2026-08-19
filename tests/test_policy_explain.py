@@ -143,6 +143,43 @@ class KmsKeyPolicyTests(unittest.TestCase):
         self.assertEqual(decisive["kind"], "missing_permission")
         self.assertEqual(decisive["layer"], "kms_key_policy")
 
+    def test_delegation_with_no_identity_evidence_blames_the_key_policy(self) -> None:
+        # Sweep-diagnosis-2026-08-19 defect: root delegation exists (the
+        # standard EnableIAMUserPermissions statement) and identity
+        # policies are empty/unreadable -- the decisive layer must be the
+        # key policy that grants this principal nothing, never a
+        # confident identity_policy verdict built on evidence we do not
+        # have.
+        evaluation = evaluate_access(
+            _request("kms:Encrypt", KEY_ARN),
+            identity_policies=[],
+            kms_key_policy={
+                "Statement": [
+                    {
+                        "Sid": "EnableIAMUserPermissions",
+                        "Effect": "Allow",
+                        "Principal": {"AWS": f"arn:aws:iam::{ACCOUNT}:root"},
+                        "Action": "kms:*",
+                        "Resource": "*",
+                    },
+                    {
+                        "Sid": "WorkloadKeyUse",
+                        "Effect": "Allow",
+                        "Principal": {"AWS": f"arn:aws:iam::{ACCOUNT}:role/other-workload"},
+                        "Action": ["kms:Encrypt", "kms:Decrypt"],
+                        "Resource": "*",
+                    },
+                ]
+            },
+        )
+
+        self.assertEqual(evaluation.verdict["effect"], "implicit_deny")
+        self.assertEqual(evaluation.verdict["blocking_layer"], "kms_key_policy")
+        decisive = evaluation.claims[0]
+        self.assertEqual(decisive["kind"], "missing_permission")
+        self.assertEqual(decisive["layer"], "kms_key_policy")
+        self.assertEqual(decisive["policy_ref"]["resource"], KEY_ARN)
+
     def test_key_policy_root_delegation_defers_to_the_identity_policy(self) -> None:
         # Real IAM semantics: a key policy granting the account root
         # delegates the decision to identity policies.

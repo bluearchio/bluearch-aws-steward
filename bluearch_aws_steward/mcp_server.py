@@ -1356,7 +1356,7 @@ class StewardMcpServer:
         elif principal.startswith(role_prefix):
             role_name = principal.removeprefix(role_prefix).rsplit("/", 1)[-1]
 
-            def _read_identity_policies() -> List[JSON]:
+            def _read_attached_policies() -> List[JSON]:
                 documents: List[JSON] = []
                 attached = client.read("iam.list_attached_role_policies", RoleName=role_name)
                 for entry in attached.get("AttachedPolicies") or []:
@@ -1371,6 +1371,10 @@ class StewardMcpServer:
                     document = policy_document((version.get("PolicyVersion") or {}).get("Document"))
                     if document:
                         documents.append(document)
+                return documents
+
+            def _read_inline_policies() -> List[JSON]:
+                documents: List[JSON] = []
                 inline = client.read("iam.list_role_policies", RoleName=role_name)
                 for policy_name in inline.get("PolicyNames") or []:
                     payload = client.read(
@@ -1383,14 +1387,27 @@ class StewardMcpServer:
                         documents.append(document)
                 return documents
 
-            identity_policies = (
+            # Attached and inline halves degrade independently: a denied
+            # attached listing with readable inline policies is normal
+            # least-privilege reality, never a reason to abort the whole
+            # identity evaluation (sweep-diagnosis-2026-08-19 defect).
+            attached_documents = (
                 _gather(
                     "identity_policy",
                     "iam.list_attached_role_policies",
-                    _read_identity_policies,
+                    _read_attached_policies,
                 )
                 or []
             )
+            inline_documents = (
+                _gather(
+                    "identity_policy",
+                    "iam.list_role_policies",
+                    _read_inline_policies,
+                )
+                or []
+            )
+            identity_policies = attached_documents + inline_documents
         else:
             ledger.append(
                 {
@@ -1430,10 +1447,19 @@ class StewardMcpServer:
             deciding_layers = {"resource_policy"}
         else:
             deciding_layers = {"identity_policy"}
-        denied_layers = {
-            str(entry.get("layer")) for entry in unknowns if entry.get("reason") == "read_denied"
+        # A verdict must never be built over a deciding layer that was not
+        # actually evaluated -- whether the read was denied or the layer is
+        # outside v1 collection (sweep-diagnosis-2026-08-19 defect).
+        unevaluated_layers = {
+            str(entry.get("layer"))
+            for entry in unknowns
+            if entry.get("reason") in ("read_denied", "not_evaluated_v1")
         }
-        if deciding_layers & denied_layers:
+        evaluated_layers = {
+            str(entry.get("layer")) for entry in ledger if entry.get("result") == "evaluated"
+        }
+        blocked_deciding = deciding_layers & (unevaluated_layers - evaluated_layers)
+        if blocked_deciding:
             return {
                 "schema_version": EXPLAIN_SCHEMA_VERSION,
                 "status": "insufficient_access",
@@ -1442,10 +1468,10 @@ class StewardMcpServer:
                 "evaluation_ledger": ledger,
                 "unknowns": unknowns,
                 "message": (
-                    "Steward could not read the deciding policy layer(s) "
-                    f"({', '.join(sorted(deciding_layers & denied_layers))}); "
-                    "grant the read permission or use a more privileged profile, "
-                    "then re-run."
+                    "Steward could not evaluate the deciding policy layer(s) "
+                    f"({', '.join(sorted(blocked_deciding))}); grant the read "
+                    "permission, use a more privileged profile, or pass an "
+                    "explicit same-account role as principal, then re-run."
                 ),
             }
 

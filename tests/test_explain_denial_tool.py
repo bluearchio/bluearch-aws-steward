@@ -223,6 +223,130 @@ class IdentityCollectionTests(unittest.TestCase):
         self.assertIn("identity_policy", layers)
 
 
+class LeastPrivilegeIdentityProvider:
+    """Real-world least-privilege shape (and the diagnosis-iam sandbox):
+    attached-policy listing denied, inline policies readable -- the
+    planted deny lives in an inline policy."""
+
+    def capabilities(self) -> Set[str]:
+        return set(READ_OPERATIONS)
+
+    def caller_identity(self) -> Dict[str, Any]:
+        return {
+            "Account": ACCOUNT,
+            "Arn": f"arn:aws:iam::{ACCOUNT}:user/operator",
+        }
+
+    def get_bucket_policy(self, bucket: str) -> Optional[Dict[str, Any]]:
+        raise AwsProviderError("AWS SDK operation failed: s3.get_bucket_policy AccessDenied")
+
+    def get_public_access_block(self, bucket: str) -> Dict[str, Any]:
+        raise AwsProviderError("AWS SDK operation failed: s3.get_public_access_block AccessDenied")
+
+    def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
+        if operation == "iam.list_attached_role_policies":
+            raise AwsProviderError(
+                "AWS SDK operation failed: iam.list_attached_role_policies AccessDenied"
+            )
+        if operation == "iam.list_role_policies":
+            assert parameters["RoleName"] == "workload"
+            return {"PolicyNames": ["fault-target"]}
+        if operation == "iam.get_role_policy":
+            return {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Sid": "AllowReads",
+                            "Effect": "Allow",
+                            "Action": "s3:GetObject",
+                            "Resource": "arn:aws:s3:::app-data/*",
+                        },
+                        {
+                            "Sid": "FaultTargetReadDeny",
+                            "Effect": "Deny",
+                            "Action": "s3:GetObject",
+                            "Resource": "arn:aws:s3:::app-data/config*",
+                        },
+                    ]
+                }
+            }
+        raise AssertionError(f"Unexpected operation: {operation} {parameters}")
+
+
+class InlineFallbackTests(unittest.TestCase):
+    def test_denied_attached_listing_still_evaluates_inline_policies(self) -> None:
+        result = _call(
+            _server(LeastPrivilegeIdentityProvider()),
+            {
+                "action": "s3:GetObject",
+                "resource": "arn:aws:s3:::app-data/config.json",
+                "principal": f"arn:aws:iam::{ACCOUNT}:role/workload",
+                "profile": "test-sso",
+                "region": "us-east-1",
+            },
+        )
+
+        self.assertEqual(result["status"], "explained")
+        self.assertEqual(result["verdict"]["effect"], "explicit_deny")
+        self.assertEqual(result["verdict"]["blocking_layer"], "identity_policy")
+        decisive = result["claims"][0]
+        self.assertEqual(decisive["policy_ref"]["statement_sid"], "FaultTargetReadDeny")
+        # The denied attached listing degrades to a declared unknown, and
+        # the inline half still counts as an evaluated identity layer.
+        identity_rows = {
+            entry["read"]: entry["result"]
+            for entry in result["evaluation_ledger"]
+            if entry["layer"] == "identity_policy"
+        }
+        self.assertEqual(identity_rows.get("iam.list_attached_role_policies"), "access_denied")
+        self.assertEqual(identity_rows.get("iam.list_role_policies"), "evaluated")
+        unknown_layers = {entry["layer"] for entry in result["unknowns"]}
+        self.assertIn("identity_policy", unknown_layers)
+
+
+class OperatorUserCallerProvider:
+    """Caller is an IAM user (outside v1 identity collection)."""
+
+    def capabilities(self) -> Set[str]:
+        return set(READ_OPERATIONS)
+
+    def caller_identity(self) -> Dict[str, Any]:
+        return {
+            "Account": ACCOUNT,
+            "Arn": f"arn:aws:iam::{ACCOUNT}:user/operator",
+        }
+
+    def get_bucket_policy(self, bucket: str) -> Optional[Dict[str, Any]]:
+        return None
+
+    def get_public_access_block(self, bucket: str) -> Dict[str, Any]:
+        return {"BlockPublicAcls": False}
+
+
+class UnevaluatedDecidingLayerTests(unittest.TestCase):
+    def test_never_asserts_a_verdict_over_an_unevaluated_deciding_layer(
+        self,
+    ) -> None:
+        # Sweep-diagnosis-2026-08-19 defect: with an out-of-scope caller
+        # (IAM user) and no explicit principal, identity policies are
+        # not_evaluated -- the old code still returned a confident
+        # implicit_deny/identity_policy built on nothing.
+        result = _call(
+            _server(OperatorUserCallerProvider()),
+            {
+                "action": "s3:GetObject",
+                "resource": "arn:aws:s3:::app-data/reports/q1.csv",
+                "profile": "test-sso",
+                "region": "us-east-1",
+            },
+        )
+
+        self.assertEqual(result["status"], "insufficient_access")
+        self.assertEqual(result["verdict"]["blocking_layer"], "unknown")
+        reasons = {entry["reason"] for entry in result["unknowns"]}
+        self.assertIn("not_evaluated_v1", reasons)
+
+
 class ResponseBudgetTests(unittest.TestCase):
     def test_oversized_statement_evidence_is_trimmed_with_a_digest(self) -> None:
         big_statement = {
