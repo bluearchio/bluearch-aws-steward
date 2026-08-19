@@ -721,6 +721,7 @@ _OPERATIONS = (
         paginated=True,
     ),
     _op("kms.describe_key", "kms", "describe_key", "kms", "describe-key"),
+    _op("kms.get_key_policy", "kms", "get_key_policy", "kms", "get-key-policy"),
     _op(
         "kms.get_key_rotation_status",
         "kms",
@@ -780,6 +781,7 @@ _OPERATIONS = (
         paginated=True,
     ),
     _op("sqs.get_queue_attributes", "sqs", "get_queue_attributes", "sqs", "get-queue-attributes"),
+    _op("sqs.get_queue_url", "sqs", "get_queue_url", "sqs", "get-queue-url"),
     _op("sqs.list_queue_tags", "sqs", "list_queue_tags", "sqs", "list-queue-tags"),
     _op(
         "apigateway.get_rest_apis",

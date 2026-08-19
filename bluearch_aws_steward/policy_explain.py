@@ -1,4 +1,4 @@
-"""Pure policy-evaluation core for ``bluearch_explain_denial``.
+"""Pure policy-evaluation core and response assembly for ``bluearch_explain_denial``.
 
 Deterministic re-implementation of the documented IAM evaluation order
 over policy documents supplied by the caller. No AWS reads happen here;
@@ -15,6 +15,8 @@ produce an "unknown" verdict instead).
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -44,6 +46,21 @@ CLAIM_KINDS = (
 )
 
 _SERVICE_PRINCIPAL_RE = re.compile(r"^[a-z0-9.-]+\.amazonaws\.com$")
+
+# Services whose policy layers the v1 collector can gather. Anything else
+# returns status "not_supported" (scope honesty -- never a plausible empty).
+EXPLAIN_SUPPORTED_SERVICES = ("dynamodb", "iam", "kms", "s3", "sns", "sqs")
+
+_MAX_CLAIMS = 5
+_MAX_STATEMENT_BYTES = 2048
+_MAX_RESPONSE_BYTES = 8192
+
+_REMEDIATION_OPERATIONS = {
+    "identity_policy": "iam.PutRolePolicy",
+    "resource_policy": None,  # service-specific; named in the description
+    "kms_key_policy": "kms.PutKeyPolicy",
+    "public_access_block": "s3.PutPublicAccessBlock",
+}
 
 _CONDITION_OPERATORS = {
     "StringEquals": "equals",
@@ -144,9 +161,7 @@ def _principal_delegates_to_root(statement: JSON, account_id: str) -> bool:
 _CONDITION_SATISFIED = "satisfied"
 
 
-def _evaluate_conditions(
-    statement: JSON, context: Mapping[str, str]
-) -> Tuple[str, Optional[JSON]]:
+def _evaluate_conditions(statement: JSON, context: Mapping[str, str]) -> Tuple[str, Optional[JSON]]:
     """-> (status, detail): 'satisfied' | 'missing_key' | 'mismatch' | 'unsupported'."""
     conditions = statement.get("Condition")
     if not isinstance(conditions, dict) or not conditions:
@@ -165,9 +180,7 @@ def _evaluate_conditions(
             if mode == "equals":
                 matched = str(got) in expected_values
             else:
-                matched = any(
-                    _pattern_matches(pattern, str(got)) for pattern in expected_values
-                )
+                matched = any(_pattern_matches(pattern, str(got)) for pattern in expected_values)
             if not matched:
                 return "mismatch", {
                     "key": str(key),
@@ -198,17 +211,15 @@ def _layer_statements(
                 collected.append(
                     _LayerStatement("identity_policy", request.principal, index, statement)
                 )
-    for layer, policy in (
+    for layer, carrier_policy in (
         ("resource_policy", resource_policy),
         ("kms_key_policy", kms_key_policy),
     ):
-        if policy is None:
+        if carrier_policy is None:
             continue
-        for index, statement in enumerate(policy.get("Statement") or []):
+        for index, statement in enumerate(carrier_policy.get("Statement") or []):
             if isinstance(statement, dict):
-                collected.append(
-                    _LayerStatement(layer, request.resource, index, statement)
-                )
+                collected.append(_LayerStatement(layer, request.resource, index, statement))
     return collected
 
 
@@ -236,7 +247,8 @@ def _claim(
 
 
 def _verdict(effect: str, blocking_layer: str) -> JSON:
-    assert blocking_layer in BLOCKING_LAYERS
+    if blocking_layer not in BLOCKING_LAYERS:
+        raise ValueError(f"blocking_layer outside the frozen vocabulary: {blocking_layer!r}")
     return {"effect": effect, "blocking_layer": blocking_layer}
 
 
@@ -249,9 +261,7 @@ def evaluate_access(
     public_access_block: Optional[JSON] = None,
 ) -> Evaluation:
     identity_policies = list(identity_policies or [])
-    statements = _layer_statements(
-        request, identity_policies, resource_policy, kms_key_policy
-    )
+    statements = _layer_statements(request, identity_policies, resource_policy, kms_key_policy)
     anonymous = _is_public_principal(request.principal)
     service = _is_service_principal(request.principal)
 
@@ -264,9 +274,7 @@ def evaluate_access(
             continue
         if not _resource_matches(statement, request.resource):
             continue
-        if entry.layer != "identity_policy" and not _principal_applies(
-            statement, request
-        ):
+        if entry.layer != "identity_policy" and not _principal_applies(statement, request):
             continue
         status, _detail = _evaluate_conditions(statement, request.condition_context)
         if status != _CONDITION_SATISFIED:
@@ -314,7 +322,9 @@ def evaluate_access(
             )
 
     # 3. Allow search on the deciding layer(s).
-    def _allow_search(layers: Sequence[str]) -> Tuple[Optional[_LayerStatement], List[Tuple[_LayerStatement, str, JSON]]]:
+    def _allow_search(
+        layers: Sequence[str],
+    ) -> Tuple[Optional[_LayerStatement], List[Tuple[_LayerStatement, str, JSON]]]:
         near_misses: List[Tuple[_LayerStatement, str, JSON]] = []
         for entry in statements:
             if entry.layer not in layers:
@@ -322,17 +332,13 @@ def evaluate_access(
             statement = entry.statement
             if statement.get("Effect") != "Allow":
                 continue
-            if any(
-                key in statement for key in ("NotAction", "NotPrincipal", "NotResource")
-            ):
+            if any(key in statement for key in ("NotAction", "NotPrincipal", "NotResource")):
                 continue
             if not _action_matches(statement, request.action):
                 continue
             if not _resource_matches(statement, request.resource):
                 continue
-            if entry.layer != "identity_policy" and not _principal_applies(
-                statement, request
-            ):
+            if entry.layer != "identity_policy" and not _principal_applies(statement, request):
                 continue
             status, detail = _evaluate_conditions(statement, request.condition_context)
             if status == _CONDITION_SATISFIED:
@@ -445,3 +451,153 @@ def _blocked_result(
             )
         ],
     )
+
+
+def _statement_digest(statement: JSON) -> str:
+    canonical = json.dumps(statement, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _trimmed_statement(statement: JSON) -> Tuple[JSON, bool]:
+    if len(json.dumps(statement)) <= _MAX_STATEMENT_BYTES:
+        return statement, False
+    trimmed = dict(statement)
+    for key in ("Resource", "NotResource", "Action", "NotAction"):
+        values = trimmed.get(key)
+        if isinstance(values, list) and len(values) > 1:
+            trimmed[key] = [values[0], f"... (+{len(values) - 1} more values trimmed)"]
+        if len(json.dumps(trimmed)) <= _MAX_STATEMENT_BYTES:
+            return trimmed, True
+    minimal = {key: trimmed.get(key) for key in ("Sid", "Effect") if trimmed.get(key) is not None}
+    minimal["_trimmed"] = "statement exceeded the evidence budget"
+    return minimal, True
+
+
+def _budget_claim(claim: JSON) -> JSON:
+    budgeted = dict(claim)
+    evidence = dict(claim.get("evidence") or {})
+    statement = evidence.get("statement")
+    if isinstance(statement, dict):
+        trimmed, truncated = _trimmed_statement(statement)
+        evidence["statement"] = trimmed
+        evidence["evidence_truncated"] = truncated
+        if truncated:
+            evidence["statement_sha256"] = _statement_digest(statement)
+    else:
+        evidence["evidence_truncated"] = False
+    budgeted["evidence"] = evidence
+    return budgeted
+
+
+def _next_block(request: AccessRequest, evaluation: Evaluation) -> JSON:
+    verification: JSON = {
+        "tool": "bluearch_explain_denial",
+        "arguments": {
+            "action": request.action,
+            "resource": request.resource,
+            "principal": request.principal,
+            "condition_context": dict(request.condition_context),
+        },
+    }
+    next_block: JSON = {"verification": verification}
+    effect = evaluation.verdict.get("effect")
+    if effect in ("allow", "unknown"):
+        return next_block
+    decisive = evaluation.claims[0] if evaluation.claims else {}
+    layer = str(decisive.get("layer") or evaluation.verdict.get("blocking_layer") or "")
+    next_block["remediation"] = {
+        "description": str(decisive.get("explanation") or "Review the blocking layer."),
+        "operation": _REMEDIATION_OPERATIONS.get(layer),
+        "tool": None,
+        "requires_review": True,
+    }
+    return next_block
+
+
+def assemble_response(
+    *,
+    request: AccessRequest,
+    evaluation: Evaluation,
+    ledger: Sequence[JSON],
+    unknowns: Sequence[JSON],
+    status: Optional[str] = None,
+    message: Optional[str] = None,
+) -> JSON:
+    claims = [_budget_claim(claim) for claim in evaluation.claims[:_MAX_CLAIMS]]
+    overflow = len(evaluation.claims) - len(claims)
+    effect = str(evaluation.verdict.get("effect") or "unknown")
+    if status is None:
+        status = "not_denied" if effect == "allow" else "explained"
+    response: JSON = {
+        "schema_version": SCHEMA_VERSION,
+        "status": status,
+        "verdict": evaluation.verdict,
+        "claims": claims,
+        "evaluation_ledger": list(ledger),
+        "unknowns": list(unknowns),
+        "next": _next_block(request, evaluation),
+    }
+    if overflow > 0:
+        response["claims_truncated"] = overflow
+    if message:
+        response["message"] = message
+    while len(json.dumps(response)) > _MAX_RESPONSE_BYTES and len(response["claims"]) > 1:
+        response["claims"] = response["claims"][:-1]
+        response["claims_truncated"] = int(response.get("claims_truncated") or 0) + 1
+    return response
+
+
+_ASSUMED_ROLE_RE = re.compile(r"^arn:aws:sts::(\d+):assumed-role/([^/]+)/.+$")
+_DENIED_MESSAGE_RE = re.compile(
+    r"User: (?P<principal>arn:\S+) is not authorized to perform: "
+    r"(?P<action>[A-Za-z0-9-]+:[A-Za-z0-9*]+)"
+    r"(?: on resource: (?P<resource>[^\s,\"]+))?"
+)
+
+
+def canonical_principal(principal: str) -> str:
+    """Map an STS assumed-role ARN to the role ARN policies reference."""
+    match = _ASSUMED_ROLE_RE.match(principal or "")
+    if match:
+        return f"arn:aws:iam::{match.group(1)}:role/{match.group(2)}"
+    return principal or ""
+
+
+def normalize_resource_ref(resource: str) -> str:
+    if resource.startswith("s3://"):
+        return "arn:aws:s3:::" + resource.removeprefix("s3://")
+    return resource
+
+
+def arn_service(resource: str) -> str:
+    parts = resource.split(":")
+    return parts[2] if resource.startswith("arn:") and len(parts) > 2 else ""
+
+
+def arn_account(resource: str) -> str:
+    parts = resource.split(":")
+    return parts[4] if resource.startswith("arn:") and len(parts) > 4 else ""
+
+
+def policy_document(value: Any) -> Optional[JSON]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        text = value
+        if text.startswith("%7B"):
+            from urllib.parse import unquote
+
+            text = unquote(text)
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def parse_denied_message(text: str) -> JSON:
+    match = _DENIED_MESSAGE_RE.search(text or "")
+    if not match:
+        return {}
+    return {key: value for key, value in match.groupdict().items() if value}
