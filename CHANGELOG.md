@@ -9,6 +9,17 @@ as preview are not covered by a stable API compatibility promise.
 
 ### Added
 
+- New read-only MCP tool `bluearch_explain_denial`: explains why one AWS
+  request is allowed or denied by naming the exact policy statement (or
+  missing permission) across identity policy, resource policy, KMS key
+  policy, and the S3 public access block — with verbatim evidence, an
+  evaluation ledger, explicit unknowns, and a next-step recipe. Single
+  call, context by arguments (never elicitation), graceful degradation on
+  denied reads, and honest `not_supported` outside its v1 service scope
+  (dynamodb, iam, kms, s3, sns, sqs). Design: docs/explain-denial-design.md.
+- Read-operation allowlist gains `sqs.get_queue_url` and
+  `kms.get_key_policy`; `iam/read-policy.json` regenerated accordingly.
+
 - New native rule `s3-policy-public-read` (high severity) that flags bucket
   policies granting read access to a public principal, including when the
   public access block already blocks the exposure. This closes the detection

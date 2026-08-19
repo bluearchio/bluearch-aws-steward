@@ -50,6 +50,21 @@ from bluearch_aws_steward.models import (
     AssessmentIntent,
 )
 from bluearch_aws_steward.policy import build_scan_policy
+from bluearch_aws_steward.policy_explain import (
+    EXPLAIN_SUPPORTED_SERVICES,
+    AccessRequest,
+    arn_account,
+    arn_service,
+    assemble_response,
+    canonical_principal,
+    evaluate_access,
+    normalize_resource_ref,
+    parse_denied_message,
+    policy_document,
+)
+from bluearch_aws_steward.policy_explain import (
+    SCHEMA_VERSION as EXPLAIN_SCHEMA_VERSION,
+)
 from bluearch_aws_steward.providers.base import AwsProvider, AwsProviderError
 from bluearch_aws_steward.providers.factory import (
     DEFAULT_AWS_PROVIDER,
@@ -897,6 +912,8 @@ class StewardMcpServer:
             return self._tool_validate_iac_patch(arguments)
         if tool_name == "bluearch_apply_remediation":
             return self._tool_apply_remediation(arguments)
+        if tool_name == "bluearch_explain_denial":
+            return self._tool_explain_denial(arguments)
 
         refinement = _compatibility_tool_refinement(tool_name, arguments)
         if refinement is not None:
@@ -1197,6 +1214,226 @@ class StewardMcpServer:
             "residual_risks": residual,
             "message": message,
         }
+
+    def _tool_explain_denial(self, arguments: JSON) -> JSON:
+        action = str(arguments.get("action") or "").strip()
+        resource = str(arguments.get("resource") or "").strip()
+        principal_argument = str(arguments.get("principal") or "").strip()
+        error_message = str(arguments.get("error_message") or "")
+        if error_message:
+            parsed = parse_denied_message(error_message)
+            action = action or str(parsed.get("action") or "")
+            resource = resource or str(parsed.get("resource") or "")
+            principal_argument = principal_argument or str(parsed.get("principal") or "")
+        if not action or not resource:
+            raise McpToolError(
+                "bluearch_explain_denial requires action and resource, or an "
+                "error_message that names them."
+            )
+        resource = normalize_resource_ref(resource)
+        service = arn_service(resource)
+        if service not in EXPLAIN_SUPPORTED_SERVICES:
+            return {
+                "schema_version": EXPLAIN_SCHEMA_VERSION,
+                "status": "not_supported",
+                "verdict": {"effect": "unknown", "blocking_layer": "unknown"},
+                "claims": [],
+                "evaluation_ledger": [],
+                "unknowns": [],
+                "message": (
+                    "bluearch_explain_denial v1 covers "
+                    f"{', '.join(EXPLAIN_SUPPORTED_SERVICES)}; "
+                    f"'{service or resource}' is outside that scope -- proceed "
+                    "with your own tooling for this service."
+                ),
+            }
+        prepared, blocked, _identity = self._prepare_live_aws_arguments(
+            "bluearch_explain_denial",
+            dict(arguments),
+            require_region=True,
+            validate_identity=True,
+        )
+        if blocked is not None:
+            return blocked
+        client = self._aws_provider_factory(prepared)
+        caller = client.caller_identity()
+        account_id = str(caller.get("Account") or arn_account(resource) or "")
+        principal = canonical_principal(principal_argument or str(caller.get("Arn") or ""))
+
+        ledger: List[JSON] = []
+        unknowns: List[JSON] = []
+
+        def _gather(layer: str, read_name: str, reader: Callable[[], Any]) -> Any:
+            try:
+                value = reader()
+            except AwsProviderError as exc:
+                ledger.append({"layer": layer, "read": read_name, "result": "access_denied"})
+                unknowns.append({"layer": layer, "reason": "read_denied", "detail": str(exc)[:200]})
+                return None
+            ledger.append({"layer": layer, "read": read_name, "result": "evaluated"})
+            return value
+
+        resource_policy: Optional[JSON] = None
+        kms_key_policy: Optional[JSON] = None
+        public_access_block: Optional[JSON] = None
+
+        if service == "s3":
+            bucket = resource.removeprefix("arn:aws:s3:::").split("/", 1)[0]
+            resource_policy = _gather(
+                "resource_policy",
+                "s3.get_bucket_policy",
+                lambda: client.get_bucket_policy(bucket),
+            )
+            public_access_block = _gather(
+                "public_access_block",
+                "s3.get_public_access_block",
+                lambda: client.get_public_access_block(bucket),
+            )
+        elif service == "sqs":
+            queue_name = resource.rsplit(":", 1)[-1]
+
+            def _read_queue_policy() -> Optional[JSON]:
+                url = client.read("sqs.get_queue_url", QueueName=queue_name).get("QueueUrl")
+                attributes = client.read(
+                    "sqs.get_queue_attributes",
+                    QueueUrl=url,
+                    AttributeNames=["Policy"],
+                )
+                return policy_document((attributes.get("Attributes") or {}).get("Policy"))
+
+            resource_policy = _gather(
+                "resource_policy", "sqs.get_queue_attributes", _read_queue_policy
+            )
+        elif service == "sns":
+
+            def _read_topic_policy() -> Optional[JSON]:
+                attributes = client.read("sns.get_topic_attributes", TopicArn=resource)
+                return policy_document((attributes.get("Attributes") or {}).get("Policy"))
+
+            resource_policy = _gather(
+                "resource_policy", "sns.get_topic_attributes", _read_topic_policy
+            )
+        elif service == "kms":
+            key_id = resource.rsplit("/", 1)[-1]
+
+            def _read_key_policy() -> Optional[JSON]:
+                payload = client.read("kms.get_key_policy", KeyId=key_id, PolicyName="default")
+                return policy_document(payload.get("Policy"))
+
+            kms_key_policy = _gather("kms_key_policy", "kms.get_key_policy", _read_key_policy)
+        else:
+            ledger.append({"layer": "resource_policy", "read": "none", "result": "not_applicable"})
+
+        identity_policies: List[JSON] = []
+        role_prefix = f"arn:aws:iam::{account_id}:role/"
+        if principal == "*" or principal.endswith(".amazonaws.com"):
+            ledger.append({"layer": "identity_policy", "read": "none", "result": "not_applicable"})
+        elif principal.startswith(role_prefix):
+            role_name = principal.removeprefix(role_prefix).rsplit("/", 1)[-1]
+
+            def _read_identity_policies() -> List[JSON]:
+                documents: List[JSON] = []
+                attached = client.read("iam.list_attached_role_policies", RoleName=role_name)
+                for entry in attached.get("AttachedPolicies") or []:
+                    policy_arn = entry.get("PolicyArn")
+                    meta = client.read("iam.get_policy", PolicyArn=policy_arn)
+                    version_id = (meta.get("Policy") or {}).get("DefaultVersionId")
+                    version = client.read(
+                        "iam.get_policy_version",
+                        PolicyArn=policy_arn,
+                        VersionId=version_id,
+                    )
+                    document = policy_document((version.get("PolicyVersion") or {}).get("Document"))
+                    if document:
+                        documents.append(document)
+                inline = client.read("iam.list_role_policies", RoleName=role_name)
+                for policy_name in inline.get("PolicyNames") or []:
+                    payload = client.read(
+                        "iam.get_role_policy",
+                        RoleName=role_name,
+                        PolicyName=policy_name,
+                    )
+                    document = policy_document(payload.get("PolicyDocument"))
+                    if document:
+                        documents.append(document)
+                return documents
+
+            identity_policies = (
+                _gather(
+                    "identity_policy",
+                    "iam.list_attached_role_policies",
+                    _read_identity_policies,
+                )
+                or []
+            )
+        else:
+            ledger.append(
+                {
+                    "layer": "identity_policy",
+                    "read": "none",
+                    "result": "not_evaluated",
+                }
+            )
+            unknowns.append(
+                {
+                    "layer": "identity_policy",
+                    "reason": "not_evaluated_v1",
+                    "detail": (
+                        "Only same-account IAM roles have their identity policies "
+                        f"collected in v1; principal is {principal}."
+                    ),
+                }
+            )
+
+        if service == "kms":
+            deciding_layers = {"kms_key_policy"}
+        elif principal == "*" or principal.endswith(".amazonaws.com"):
+            deciding_layers = {"resource_policy"}
+        else:
+            deciding_layers = {"identity_policy"}
+        denied_layers = {
+            str(entry.get("layer")) for entry in unknowns if entry.get("reason") == "read_denied"
+        }
+        if deciding_layers & denied_layers:
+            return {
+                "schema_version": EXPLAIN_SCHEMA_VERSION,
+                "status": "insufficient_access",
+                "verdict": {"effect": "unknown", "blocking_layer": "unknown"},
+                "claims": [],
+                "evaluation_ledger": ledger,
+                "unknowns": unknowns,
+                "message": (
+                    "Steward could not read the deciding policy layer(s) "
+                    f"({', '.join(sorted(deciding_layers & denied_layers))}); "
+                    "grant the read permission or use a more privileged profile, "
+                    "then re-run."
+                ),
+            }
+
+        condition_context = {
+            str(key): str(value)
+            for key, value in (arguments.get("condition_context") or {}).items()
+        }
+        request = AccessRequest(
+            action=action,
+            resource=resource,
+            principal=principal,
+            account_id=account_id,
+            condition_context=condition_context,
+        )
+        evaluation = evaluate_access(
+            request,
+            identity_policies=identity_policies,
+            resource_policy=resource_policy,
+            kms_key_policy=kms_key_policy,
+            public_access_block=public_access_block,
+        )
+        return assemble_response(
+            request=request,
+            evaluation=evaluation,
+            ledger=ledger,
+            unknowns=unknowns,
+        )
 
     def _scan_live_finding(
         self,
@@ -4688,6 +4925,35 @@ def _tools() -> List[JSON]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "bluearch_explain_denial",
+            "description": (
+                "Explain why one AWS request is allowed or denied by naming the exact "
+                "policy statement (or missing permission) across identity policy, "
+                "resource policy, KMS key policy, and the S3 public access block -- "
+                "with verbatim evidence, explicit unknowns, and a next-step recipe. "
+                "Read-only; supply request context keys via condition_context, the "
+                "tool never guesses them."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string"},
+                    "resource": {"type": "string"},
+                    "principal": {"type": "string"},
+                    "error_message": {"type": "string"},
+                    "condition_context": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                    },
+                    "provider": aws_options["provider"],
+                    "profile": aws_options["profile"],
+                    "endpoint_url": aws_options["endpoint_url"],
+                    "region": aws_options["region"],
+                },
+                "additionalProperties": False,
+            },
+        },
     ]
 
 
@@ -4720,6 +4986,7 @@ def _assert_smoke(responses: List[JSON]) -> None:
         "bluearch_plan_remediation",
         "bluearch_verify_remediation",
         "bluearch_apply_remediation",
+        "bluearch_explain_denial",
         "bluearch_doctor",
     }
     if not expected_tools <= tool_names:
