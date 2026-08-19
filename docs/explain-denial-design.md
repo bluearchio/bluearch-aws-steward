@@ -72,11 +72,13 @@ Read-only. No guarded-write surface, no approval semantics.
 
 ```jsonc
 {
+  "schema_version": "1",                   // graders pin against this
   "status": "explained" | "not_denied" | "not_supported" | "insufficient_access",
   "verdict": {
     "effect": "explicit_deny" | "implicit_deny" | "allow" | "conditional" | "unknown",
     "blocking_layer": "identity_policy" | "resource_policy" | "kms_key_policy"
                     | "public_access_block" | "condition_mismatch" | "scp" | "none"
+                    | "unknown"
   },
   "claims": [
     {
@@ -94,7 +96,11 @@ Read-only. No guarded-write surface, no approval semantics.
     { "layer": "scp", "read": "organizations.describe_policy", "result": "access_denied" }
   ],
   "unknowns": [
-    "SCP evaluation unavailable (organizations read denied); an SCP deny cannot be excluded."
+    {
+      "layer": "scp",                      // same frozen vocabulary as blocking_layer
+      "reason": "read_denied" | "not_evaluated_v1" | "not_applicable",
+      "detail": "organizations read denied; an SCP deny cannot be excluded."  // free text, not graded
+    }
   ],
   "next": {
     "remediation": {
@@ -121,6 +127,19 @@ Contract rules:
   not supply produce `verdict.effect: "conditional"` and a claim naming the
   missing key — the tool never guesses request context.
 - `error_message` parsing is convenience only; explicit arguments win.
+- **Frozen vocabularies, versioned by `schema_version`:** the
+  `blocking_layer` / `unknowns[].layer` enum and the `unknowns[].reason`
+  enum are closed sets — graders string-match against them, so any addition
+  bumps `schema_version`. Free text lives only in `explanation` and
+  `unknowns[].detail`, which are never graded.
+- **Response size budget (the graded artifact is the *recorded* output,
+  post-redaction and capped by the harness — 16 KiB for CLI tools, an MCP
+  char bound of its own):** at most 5 claims (decisive first; overflow
+  becomes `claims_truncated: n`); `evidence.statement` is the referenced
+  statement only, never the whole policy document, trimmed to 2 KiB with
+  `evidence_truncated: true` plus a sha256 digest when trimmed. Target: a
+  typical response ≤ 8 KiB, comfortably under every recording cap so the
+  grader never sees truncated JSON.
 
 ## Evaluation semantics (v1 scope)
 
@@ -147,21 +166,60 @@ Anything else → `status: "not_supported"` naming what to use instead.
 
 ## How the eval grades it (contract for cloudarch-eval)
 
-Deterministic checks over the structured output — no LLM judge, consistent
-with the harness's fail-closed doctrine:
+Reviewed against the harness code by its owner (2026-08-18). Deterministic
+checks over the structured output — no LLM judge, consistent with the
+harness's fail-closed doctrine. `GradeReport`/`CheckResult` need no change;
+the harness-side extension is passing the trial's already-snapshotted
+`ToolCallRecord`s into diagnosis-family graders (a small, localized change
+at the single production call site, planned as its own vertical slice on
+the cloudarch-eval side).
+
+**Selection rule (which call is graded):** the LAST successful
+`bluearch_explain_denial` call in the trial. Deterministic, allows honest
+iteration toward a conclusion, and never rewards spray-and-pray across
+actors/resources — grading any-call-matches would measure the tool's power,
+not the model's diagnosis.
 
 - `required.blocking_layer_named` — `verdict.blocking_layer` equals the
-  planted defect's layer.
+  planted defect's layer (string equality against the frozen vocabulary).
 - `required.statement_identified` — some claim's `policy_ref` matches the
-  planted statement (Sid or index + resource).
-- `forbidden.write_calls` — the trial's tool-call ledger shows no write.
-- `behavioral.unknowns_declared` — layers the sandbox makes unreadable
-  appear in `unknowns`, not as silent passes.
+  planted statement, **Sid-first**: planted statements always carry a
+  canary-unique Sid, so a fabricated or echoed claim cannot match without
+  the tool having actually read the deny. `statement_index` + resource is a
+  documented fallback only.
+- `forbidden.write_calls` — a fold over the trial's `ToolCallRecord`
+  classifications: no WRITE.
+- `behavioral.unknowns_declared` — the per-scenario, fixed set of
+  sandbox-unreadable layers appears in `unknowns` with the frozen
+  vocabulary, not as silent passes.
 
-Certification: single-call probe (`explain_denial` on a canary resource with
-a planted deny) whose response contains the canary identifier — the same
-shape as the existing `bluearch_scan_aws` probe, so it joins the certified
-chain with one probe-spec step and no new harness machinery.
+Certification: single-call probe (`explain_denial` on a canary resource
+**with a planted deny**, exercising the denial path — the certification
+owns the throwaway LocalEmu, so the upgrade is free) whose response contains
+the canary identifier — the same shape as the existing `bluearch_scan_aws`
+probe, so it joins the certified chain with one probe-spec step and no new
+harness machinery.
+
+## Scenario family (harness-owner-reviewed decision)
+
+A new `diagnosis-*` family that **reuses the planted defects and seed
+derivation of the seven existing scenarios as a shared library — never the
+scenario ids**. A grading toggle on the same id would fork the meaning of
+`descriptor_hash`/`grader_hash` in history and confuse coverage/resume.
+Comparability comes from same-defect + same-seed across families:
+`iam-explicit-deny` vs `iam-explicit-deny-diagnosis` as separate, honest
+rows.
+
+## Open questions for review (Artur / Joel)
+
+1. **Scoreboard framing:** the mcp-standalone arm was removed from the site
+   scoreboard under fix-grading (where it has a structural ceiling).
+   Diagnosis grading is exactly the framing where that arm becomes
+   meaningful again — should it return to the published scoreboard for
+   `diagnosis-*` rows?
+2. **v1 evaluation scope:** same-account only, SCPs/permission boundaries as
+   declared unknowns — acceptable for the first release, or is any of these
+   layers a must-have?
 
 ## Implementation sketch (when approved)
 
