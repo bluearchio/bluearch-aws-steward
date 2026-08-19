@@ -223,6 +223,49 @@ class IdentityCollectionTests(unittest.TestCase):
         self.assertIn("identity_policy", layers)
 
 
+class OperatorUserCallerProvider:
+    """Caller is an IAM user (outside v1 identity collection)."""
+
+    def capabilities(self) -> Set[str]:
+        return set(READ_OPERATIONS)
+
+    def caller_identity(self) -> Dict[str, Any]:
+        return {
+            "Account": ACCOUNT,
+            "Arn": f"arn:aws:iam::{ACCOUNT}:user/operator",
+        }
+
+    def get_bucket_policy(self, bucket: str) -> Optional[Dict[str, Any]]:
+        return None
+
+    def get_public_access_block(self, bucket: str) -> Dict[str, Any]:
+        return {"BlockPublicAcls": False}
+
+
+class UnevaluatedDecidingLayerTests(unittest.TestCase):
+    def test_never_asserts_a_verdict_over_an_unevaluated_deciding_layer(
+        self,
+    ) -> None:
+        # Sweep-diagnosis-2026-08-19 defect: with an out-of-scope caller
+        # (IAM user) and no explicit principal, identity policies are
+        # not_evaluated -- the old code still returned a confident
+        # implicit_deny/identity_policy built on nothing.
+        result = _call(
+            _server(OperatorUserCallerProvider()),
+            {
+                "action": "s3:GetObject",
+                "resource": "arn:aws:s3:::app-data/reports/q1.csv",
+                "profile": "test-sso",
+                "region": "us-east-1",
+            },
+        )
+
+        self.assertEqual(result["status"], "insufficient_access")
+        self.assertEqual(result["verdict"]["blocking_layer"], "unknown")
+        reasons = {entry["reason"] for entry in result["unknowns"]}
+        self.assertIn("not_evaluated_v1", reasons)
+
+
 class ResponseBudgetTests(unittest.TestCase):
     def test_oversized_statement_evidence_is_trimmed_with_a_digest(self) -> None:
         big_statement = {

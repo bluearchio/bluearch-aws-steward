@@ -348,7 +348,12 @@ def evaluate_access(
 
     if kms_key_policy is not None:
         # KMS: the key policy is authoritative. A direct grant suffices;
-        # a root grant delegates to identity policies.
+        # a root grant delegates to identity policies -- but when the key
+        # policy grants this principal nothing directly, the decisive
+        # layer is always the key policy: a delegated identity allow can
+        # rescue the request (checked below), while an identity verdict
+        # built without identity evidence is a guess (sweep-diagnosis
+        # 2026-08-19 defect).
         direct, key_misses = _allow_search(["kms_key_policy"])
         if direct is not None:
             return _allow_result(request, direct)
@@ -359,11 +364,10 @@ def evaluate_access(
             for entry in statements
             if entry.layer == "kms_key_policy"
         )
-        if delegates:
-            identity_allow, identity_misses = _allow_search(["identity_policy"])
+        if delegates and identity_policies:
+            identity_allow, _identity_misses = _allow_search(["identity_policy"])
             if identity_allow is not None:
                 return _allow_result(request, identity_allow)
-            return _blocked_result(request, "identity_policy", identity_misses)
         return _blocked_result(request, "kms_key_policy", key_misses)
 
     if anonymous or service:
