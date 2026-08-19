@@ -1385,6 +1385,20 @@ class StewardMcpServer:
                 }
             )
 
+        # v1 never evaluates SCPs; the contract requires that limit declared,
+        # never silently passed (docs/explain-denial-design.md).
+        ledger.append({"layer": "scp", "read": "none", "result": "not_evaluated"})
+        unknowns.append(
+            {
+                "layer": "scp",
+                "reason": "not_evaluated_v1",
+                "detail": (
+                    "Service control policies are not evaluated in v1; an "
+                    "organization-level deny cannot be excluded."
+                ),
+            }
+        )
+
         if service == "kms":
             deciding_layers = {"kms_key_policy"}
         elif principal == "*" or principal.endswith(".amazonaws.com"):

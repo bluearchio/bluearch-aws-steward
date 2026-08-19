@@ -106,6 +106,15 @@ class ExplainDenialToolTests(unittest.TestCase):
         self.assertIn(TOPIC_ARN, decisive["explanation"])
         layers = {entry["layer"]: entry["result"] for entry in result["evaluation_ledger"]}
         self.assertEqual(layers.get("resource_policy"), "evaluated")
+        # v1 never evaluates SCPs; the contract requires that limit declared,
+        # never silently passed (docs/explain-denial-design.md).
+        self.assertEqual(layers.get("scp"), "not_evaluated")
+        scp_unknowns = [
+            entry
+            for entry in result["unknowns"]
+            if entry["layer"] == "scp" and entry["reason"] == "not_evaluated_v1"
+        ]
+        self.assertEqual(len(scp_unknowns), 1)
         self.assertIn("verification", result["next"])
         self.assertIn("sqs.get_queue_attributes", provider.reads)
 
