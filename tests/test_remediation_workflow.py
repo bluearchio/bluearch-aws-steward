@@ -416,6 +416,18 @@ class GuardedRemediationWorkflowTests(unittest.TestCase):
         residual_rules = {item["rule"] for item in applied["residual_risks"]}
         self.assertIn("s3-policy-public-read", residual_rules)
         self.assertIn("bucket policy", applied["message"])
+        # Small models need the next step spelled out, not just described:
+        # every residual risk carries its catalog action, and the response
+        # ends with an action-first next block plus a verification recipe.
+        for item in applied["residual_risks"]:
+            self.assertTrue(item["action"])
+        next_block = applied["next"]
+        self.assertTrue(next_block["remediation"]["requires_review"])
+        self.assertIn("bucket policy", next_block["remediation"]["description"].lower())
+        verification = next_block["verification"]
+        self.assertEqual(verification["tool"], "bluearch_scan_aws")
+        self.assertIn("s3-policy-public-read", verification["arguments"]["rule_filter"])
+        self.assertEqual(verification["arguments"]["service"], "s3")
 
     def test_changed_live_state_invalidates_plan_without_writing(self) -> None:
         provider = MutableAwsProvider()

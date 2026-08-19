@@ -1198,6 +1198,30 @@ class StewardMcpServer:
                 f"is not safe yet: {residual_details}. Review residual_risks and correct "
                 "them before treating the resource as remediated."
             )
+            residual_rule_filter = ",".join(
+                sorted({str(item.get("rule")) for item in residual if item.get("rule")})
+            )
+            verification_arguments: JSON = {
+                "service": str(finding.get("service") or "all"),
+                "scope_confirmed": True,
+            }
+            if residual_rule_filter:
+                verification_arguments["rule_filter"] = residual_rule_filter
+            resource_ref = str(finding.get("resource") or "")
+            if resource_ref.startswith("s3://"):
+                verification_arguments["bucket_prefix"] = resource_ref.removeprefix("s3://").split(
+                    "/", 1
+                )[0]
+            residual_next = {
+                "remediation": {
+                    "description": " ".join(str(item.get("action")) for item in residual),
+                    "requires_review": True,
+                },
+                "verification": {
+                    "tool": "bluearch_scan_aws",
+                    "arguments": verification_arguments,
+                },
+            }
         else:
             status = "applied"
             message = "Remediation was applied and a fresh AWS read confirmed the finding is gone."
@@ -1213,6 +1237,7 @@ class StewardMcpServer:
             "remaining_finding": remaining,
             "residual_risks": residual,
             "message": message,
+            **({"next": residual_next} if residual else {}),
         }
 
     def _tool_explain_denial(self, arguments: JSON) -> JSON:
@@ -1564,6 +1589,7 @@ class StewardMcpServer:
                         "Steward could not evaluate residual exposure after the write: "
                         f"{exc}. Re-scan this resource before treating it as safe."
                     ),
+                    "action": "Re-scan this resource before treating it as safe.",
                 }
             ]
         return [
@@ -1572,6 +1598,10 @@ class StewardMcpServer:
                 "resource": candidate.get("resource"),
                 "severity": candidate.get("severity"),
                 "scenario": candidate.get("scenario"),
+                "action": str(
+                    (candidate.get("remediation") or {}).get("summary")
+                    or "Review and correct this exposure."
+                ),
             }
             for candidate in payload.get("findings") or []
             if candidate.get("resource") == resource

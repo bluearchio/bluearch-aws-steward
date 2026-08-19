@@ -4,7 +4,7 @@ import unittest
 from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from io import StringIO
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 from unittest.mock import patch
 
 from bluearch_aws_steward.cli import _print_scan_text
@@ -19,6 +19,7 @@ from bluearch_aws_steward.mcp_server import (
 )
 from bluearch_aws_steward.policy import ScanPolicy, build_scan_policy
 from bluearch_aws_steward.providers.base import AwsProviderError
+from bluearch_aws_steward.providers.operations import READ_OPERATIONS
 from bluearch_aws_steward.scanner import run_aws_scan
 
 
@@ -936,3 +937,37 @@ class MultiServiceMcpTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeniedS3Provider:
+    """Single-service scan target whose only list call is denied."""
+
+    def capabilities(self) -> Set[str]:
+        return set(READ_OPERATIONS)
+
+    def list_buckets(self) -> List[str]:
+        raise AwsProviderError(
+            "AWS SDK operation failed: s3.list_buckets AccessDenied: User is "
+            "not authorized to perform: s3:ListAllMyBuckets"
+        )
+
+
+class SingleServicePartialCoverageTests(unittest.TestCase):
+    def test_single_service_scan_degrades_to_partial_result_on_access_denied(
+        self,
+    ) -> None:
+        result = run_aws_scan(
+            DeniedS3Provider(),
+            service="s3",
+            profile=None,
+            endpoint_url=None,
+            region="us-east-1",
+            provider="aws-sdk",
+        )
+
+        self.assertEqual(result.service, "s3")
+        self.assertEqual(result.findings, [])
+        (error,) = result.summary["service_errors"]
+        self.assertEqual(error["service"], "s3")
+        self.assertIn("AccessDenied", str(error["detail"]))
+        self.assertGreaterEqual(int(result.summary["scan_errors"]), 1)
