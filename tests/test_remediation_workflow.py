@@ -426,9 +426,7 @@ class GuardedRemediationWorkflowTests(unittest.TestCase):
         self.assertIn("bucket policy", next_block["remediation"]["description"].lower())
         verification = next_block["verification"]
         self.assertEqual(verification["tool"], "bluearch_scan_aws")
-        self.assertIn(
-            "s3-policy-public-read", verification["arguments"]["rule_filter"]
-        )
+        self.assertIn("s3-policy-public-read", verification["arguments"]["rule_filter"])
         self.assertEqual(verification["arguments"]["service"], "s3")
 
     def test_changed_live_state_invalidates_plan_without_writing(self) -> None:

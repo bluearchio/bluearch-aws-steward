@@ -1199,13 +1199,7 @@ class StewardMcpServer:
                 "them before treating the resource as remediated."
             )
             residual_rule_filter = ",".join(
-                sorted(
-                    {
-                        str(item.get("rule"))
-                        for item in residual
-                        if item.get("rule")
-                    }
-                )
+                sorted({str(item.get("rule")) for item in residual if item.get("rule")})
             )
             verification_arguments: JSON = {
                 "service": str(finding.get("service") or "all"),
@@ -1215,14 +1209,12 @@ class StewardMcpServer:
                 verification_arguments["rule_filter"] = residual_rule_filter
             resource_ref = str(finding.get("resource") or "")
             if resource_ref.startswith("s3://"):
-                verification_arguments["bucket_prefix"] = resource_ref.removeprefix(
-                    "s3://"
-                ).split("/", 1)[0]
+                verification_arguments["bucket_prefix"] = resource_ref.removeprefix("s3://").split(
+                    "/", 1
+                )[0]
             residual_next = {
                 "remediation": {
-                    "description": " ".join(
-                        str(item.get("action")) for item in residual
-                    ),
+                    "description": " ".join(str(item.get("action")) for item in residual),
                     "requires_review": True,
                 },
                 "verification": {
