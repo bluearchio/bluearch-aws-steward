@@ -117,26 +117,59 @@ def run_aws_scan(
             resources_scanned=0,
         )
         _raise_if_cancelled(cancel_event)
-        result = _scan_one(
-            selected_service,
-            client,
-            profile=profile,
-            endpoint_url=endpoint_url,
-            region=region,
-            provider=provider,
-            bucket_prefix=bucket_prefix,
-            rule_filter=rule_filter,
-            policy=policy,
-            kubernetes_provider=kubernetes_provider,
-            kubeconfig=kubeconfig,
-            kubernetes_context=kubernetes_context,
-            kubernetes_namespaces=kubernetes_namespaces,
-            kubernetes_excluded_namespaces=kubernetes_excluded_namespaces,
-            kubernetes_metrics_file=kubernetes_metrics_file,
-            kubernetes_metrics_source=kubernetes_metrics_source,
-            eks_fixture_map=eks_fixture_map,
-            eks_cluster_name=eks_cluster_name,
-        )
+        try:
+            result = _scan_one(
+                selected_service,
+                client,
+                profile=profile,
+                endpoint_url=endpoint_url,
+                region=region,
+                provider=provider,
+                bucket_prefix=bucket_prefix,
+                rule_filter=rule_filter,
+                policy=policy,
+                kubernetes_provider=kubernetes_provider,
+                kubeconfig=kubeconfig,
+                kubernetes_context=kubernetes_context,
+                kubernetes_namespaces=kubernetes_namespaces,
+                kubernetes_excluded_namespaces=kubernetes_excluded_namespaces,
+                kubernetes_metrics_file=kubernetes_metrics_file,
+                kubernetes_metrics_source=kubernetes_metrics_source,
+                eks_fixture_map=eks_fixture_map,
+                eks_cluster_name=eks_cluster_name,
+            )
+        except AwsProviderError as exc:
+            # A denied read is incomplete coverage, never a dead scan: the
+            # multi-service path already degrades per service; a
+            # single-service request degrades the same way so the caller
+            # sees explicit service_errors instead of a hard failure.
+            degraded = _aggregate_results(
+                [],
+                [
+                    {
+                        "service": selected_service,
+                        "error_type": "aws_provider",
+                        "detail": exc.detail or str(exc),
+                    }
+                ],
+                requested_service=requested_service,
+                services=services,
+                profile=profile,
+                endpoint_url=endpoint_url,
+                region=region,
+                provider=provider,
+                bucket_prefix=bucket_prefix,
+                rule_filter=rule_filter,
+                policy=policy,
+                started_at=started_at,
+                partial=False,
+                cancelled=False,
+                worker_count=1,
+            )
+            # _aggregate_results labels multi-service payloads "all"; a
+            # degraded single-service request keeps its own label.
+            degraded.service = selected_service
+            return degraded
         result.summary["policy_overrides"] = policy.to_dict() if policy else {}
         _add_detection_coverage(result, requested_service, services, rule_filter)
         _emit_partial(partial_callback, result)
