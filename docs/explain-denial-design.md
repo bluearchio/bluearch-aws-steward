@@ -8,8 +8,8 @@ which is a control, not a statement).
 
 Benchmark evidence (cloudarch-eval `sweep-2026-08-12` and the 2026-08-18
 comparative suite, 1,240+ trials over Opus 4.5/Sonnet 4.5/Haiku 4.5) showed
-that **seven of the ten incident scenarios reduce to one operation Steward
-does not offer today**: given an actor, an action, and a resource, name the
+that **six of the ten incident scenarios reduce to one operation Steward
+did not offer**: given an actor, an action, and a resource, name the
 exact policy statement that denies the request or the exact permission that
 is missing.
 
@@ -21,7 +21,7 @@ is missing.
 | `s3-upload-kms-denied` | KMS grant/condition mismatch on PutObject |
 | `sns-sqs-delivery-rejected` | queue policy rejecting the topic principal |
 | `eventbridge-sqs-policy-rejects-delivery` | queue policy condition mismatch (`aws:SourceArn`) |
-| `sqs-dlq-redrive-misconfigured` | redrive/permission mismatch |
+| `sqs-dlq-redrive-misconfigured` | ~~redrive/permission mismatch~~ **CORRECTED 2026-08-19: the planted fault is a RedrivePolicy configuration loop, not a policy denial — outside this tool's class (family stays at six; see "Non-denial outcomes" below)** |
 
 In those scenarios the models solved the problem with raw `aws_cli` reads
 while Steward's scan-shaped tools added only noise (AccessDenied hard-fails,
@@ -202,10 +202,31 @@ the canary identifier — the same shape as the existing `bluearch_scan_aws`
 probe, so it joins the certified chain with one probe-spec step and no new
 harness machinery.
 
+## Non-denial outcomes (contract note, 2026-08-19)
+
+Verified against the shipped v1 code, for graders and future scenario
+design:
+
+- A request an existing Allow statement satisfies returns
+  `status: "not_denied"` with a non-empty `claims` list — `kind:
+  "satisfied_layer"` carrying the real `policy_ref` (Sid) of the allowing
+  statement. An "expected-none" grading form over this shape is a viable
+  contract evolution (schema stays at version 1; the check would pin
+  `status` + the satisfied statement's Sid).
+- A service-managed flow with NO policy present is a declared v1
+  limitation: v1 returns `implicit_deny`/`missing_permission` on the
+  resource-policy layer, which is wrong for flows that IAM does not
+  govern — SQS DLQ redrive is governed by `RedriveAllowPolicy`, not a
+  queue policy. This is exactly why `sqs-dlq-redrive-misconfigured` is
+  out of the diagnosis family: the planted defect is a configuration
+  loop, and pointing this tool at it would produce a misleading verdict.
+  v2 candidates: model `RedriveAllowPolicy`, or return `not_supported`
+  for service-managed flows v1 cannot decide.
+
 ## Scenario family (harness-owner-reviewed decision)
 
 A new `diagnosis-*` family that **reuses the planted defects and seed
-derivation of the seven existing scenarios as a shared library — never the
+derivation of the six in-class incident scenarios as a shared library — never the
 scenario ids**. A grading toggle on the same id would fork the meaning of
 `descriptor_hash`/`grader_hash` in history and confuse coverage/resume.
 Comparability comes from same-defect + same-seed across families:
@@ -227,15 +248,15 @@ rows.
 
 - New module `bluearch_aws_steward/policy_explain.py`: pure evaluation core
   (policy documents in → verdict/claims out) + thin live-read layer reusing
-  the existing providers. The seven benchmark scenarios become unit-test
+  the existing providers. The six in-class benchmark scenarios become unit-test
   fixtures for the pure core — TDD directly against the cases that matter.
 - `mcp_server.py`: tool registration + schema; read-only, no live-context
   requirement beyond the standard profile/region resolution.
 - Tests: fixture-driven core tests (one per scenario class), MCP contract
   test, partial-read degradation test, `not_supported` honesty test.
-- Measurement: `cloudarch-eval dev --scenario <the seven>` first (mechanism:
+- Measurement: `cloudarch-eval dev --scenario <the six>` first (mechanism:
   the right statement named), then a confirmation sweep on those scenarios.
-  Success = combined arm ≥ baseline on the seven scenarios.
+  Success = combined arm ≥ baseline on the six in-class scenarios.
 
 ## Follow-ups this unblocks (not in this proposal)
 
