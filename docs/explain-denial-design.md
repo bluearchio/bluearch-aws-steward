@@ -1,6 +1,8 @@
 # Design: `bluearch_explain_denial` — single-call policy-denial diagnosis
 
-Status: PROPOSAL for review (Artur, Joel). No code in this change.
+Status: PROPOSAL for review (Artur, Joel). Implementation: PR #54
+(`blocking_control` claim kind added there for the public-access-block layer,
+which is a control, not a statement).
 
 ## Why this tool, why now
 
@@ -83,7 +85,7 @@ Read-only. No guarded-write surface, no approval semantics.
   "claims": [
     {
       "claim_id": "c1",
-      "kind": "denying_statement" | "missing_permission" | "condition_mismatch" | "satisfied_layer",
+      "kind": "denying_statement" | "missing_permission" | "condition_mismatch" | "satisfied_layer" | "blocking_control",
       "layer": "resource_policy",
       "policy_ref": { "resource": "arn:aws:sqs:...:queue", "statement_sid": "DenyAll", "statement_index": 0 },
       "evidence": { "statement": { /* verbatim statement */ }, "observed_at": "..." },
