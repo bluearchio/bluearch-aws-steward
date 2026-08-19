@@ -4392,7 +4392,7 @@ def _tools() -> List[JSON]:
         **assessment_properties,
         "service": {**assessment_properties["service"], "default": "all"},
     }
-    return [
+    tools: List[JSON] = [
         {
             "name": "bluearch_validate_eks_connection",
             "description": (
@@ -4969,6 +4969,15 @@ def _tools() -> List[JSON]:
             },
         },
     ]
+    # Every tool declares its mutation contract (MCP annotations).
+    # Fail-closed classifiers treat missing annotations as a write; the
+    # only Steward tool that mutates AWS is the guarded apply.
+    for tool in tools:
+        if tool["name"] == "bluearch_apply_remediation":
+            tool["annotations"] = {"readOnlyHint": False, "destructiveHint": True}
+        else:
+            tool["annotations"] = {"readOnlyHint": True}
+    return tools
 
 
 def _assert_smoke(responses: List[JSON]) -> None:
