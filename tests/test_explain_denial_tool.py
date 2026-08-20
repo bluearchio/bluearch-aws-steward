@@ -680,9 +680,7 @@ class RedriveCollectorTests(unittest.TestCase):
                 "action": "sqs:SendMessage",
                 "resource": RedriveQueueProvider.DLQ_ARN,
                 "principal": "sqs.amazonaws.com",
-                "condition_context": {
-                    "aws:SourceArn": f"arn:aws:sqs:us-east-1:{ACCOUNT}:orders"
-                },
+                "condition_context": {"aws:SourceArn": f"arn:aws:sqs:us-east-1:{ACCOUNT}:orders"},
                 "profile": "test-sso",
                 "region": "us-east-1",
             },
