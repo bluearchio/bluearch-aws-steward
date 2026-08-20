@@ -467,6 +467,93 @@ class RoleDiscoveryHintTests(unittest.TestCase):
         self.assertIn("principal", details)
 
 
+class MultiSubjectProvider:
+    """No principal given; two roles visible; exactly one is blocked for
+    the requested action -- the expert evaluates the candidates in one
+    pass and answers for the blocked subject, explicitly labeled."""
+
+    def capabilities(self) -> Set[str]:
+        return set(READ_OPERATIONS)
+
+    def caller_identity(self) -> Dict[str, Any]:
+        return {
+            "Account": ACCOUNT,
+            "Arn": f"arn:aws:iam::{ACCOUNT}:user/operator",
+        }
+
+    def get_bucket_policy(self, bucket: str) -> Optional[Dict[str, Any]]:
+        return None
+
+    def get_public_access_block(self, bucket: str) -> Dict[str, Any]:
+        return {"BlockPublicAcls": False}
+
+    def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
+        if operation == "iam.list_roles":
+            return {"Roles": [{"RoleName": "reader"}, {"RoleName": "workload"}]}
+        if operation == "iam.get_role":
+            return {"Role": {"RoleName": parameters["RoleName"]}}
+        if operation == "iam.list_attached_role_policies":
+            return {"AttachedPolicies": []}
+        if operation == "iam.list_role_policies":
+            return {"PolicyNames": ["main"]}
+        if operation == "iam.get_role_policy":
+            if parameters["RoleName"] == "reader":
+                statements = [
+                    {
+                        "Sid": "ReaderAllow",
+                        "Effect": "Allow",
+                        "Action": "s3:GetObject",
+                        "Resource": "arn:aws:s3:::app-data/*",
+                    }
+                ]
+            else:
+                statements = [
+                    {
+                        "Sid": "WorkloadAllow",
+                        "Effect": "Allow",
+                        "Action": "s3:GetObject",
+                        "Resource": "arn:aws:s3:::app-data/*",
+                    },
+                    {
+                        "Sid": "CanaryConfigDeny",
+                        "Effect": "Deny",
+                        "Action": "s3:GetObject",
+                        "Resource": "arn:aws:s3:::app-data/config*",
+                    },
+                ]
+            return {"PolicyDocument": {"Statement": statements}}
+        raise AssertionError(f"Unexpected operation: {operation} {parameters}")
+
+
+class MultiSubjectDiagnosisTests(unittest.TestCase):
+    def test_single_blocked_candidate_is_answered_as_that_subject(self) -> None:
+        result = _call(
+            _server(MultiSubjectProvider()),
+            {
+                "action": "s3:GetObject",
+                "resource": "arn:aws:s3:::app-data/config.json",
+                "profile": "test-sso",
+                "region": "us-east-1",
+            },
+        )
+
+        self.assertEqual(result["status"], "explained")
+        self.assertEqual(result["verdict"]["effect"], "explicit_deny")
+        self.assertEqual(result["verdict"]["blocking_layer"], "identity_policy")
+        decisive = result["claims"][0]
+        self.assertEqual(decisive["policy_ref"]["statement_sid"], "CanaryConfigDeny")
+        # The answered subject must be unmistakable: named in an unknowns
+        # note and carried in the verification recipe.
+        details = " ".join(str(entry.get("detail")) for entry in result["unknowns"])
+        self.assertIn("workload", details)
+        self.assertIn("reader", details)
+        verification = result["next"]["verification"]
+        self.assertEqual(
+            verification["arguments"]["principal"],
+            f"arn:aws:iam::{ACCOUNT}:role/workload",
+        )
+
+
 class OperatorUserCallerProvider:
     """Caller is an IAM user (outside v1 identity collection)."""
 
