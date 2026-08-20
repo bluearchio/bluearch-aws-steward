@@ -151,6 +151,16 @@ _OPERATIONS = (
         paginated=True,
     ),
     _op("iam.get_role_policy", "iam", "get_role_policy", "iam", "get-role-policy"),
+    _op("iam.get_role", "iam", "get_role", "iam", "get-role"),
+    _op(
+        "iam.list_roles",
+        "iam",
+        "list_roles",
+        "iam",
+        "list-roles",
+        result_keys=("Roles",),
+        paginated=True,
+    ),
     _op(
         "ec2.describe_security_groups",
         "ec2",
