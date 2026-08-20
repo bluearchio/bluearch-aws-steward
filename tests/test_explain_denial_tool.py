@@ -174,6 +174,8 @@ class IdentityCollectionProvider:
         return {"BlockPublicAcls": False}
 
     def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
+        if operation == "iam.get_role":
+            return {"Role": {"RoleName": parameters["RoleName"]}}
         if operation == "iam.list_attached_role_policies":
             assert parameters["RoleName"] == "workload"
             return {"AttachedPolicies": [{"PolicyArn": f"arn:aws:iam::{ACCOUNT}:policy/app-reads"}]}
@@ -244,6 +246,8 @@ class LeastPrivilegeIdentityProvider:
         raise AwsProviderError("AWS SDK operation failed: s3.get_public_access_block AccessDenied")
 
     def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
+        if operation == "iam.get_role":
+            return {"Role": {"RoleName": parameters["RoleName"]}}
         if operation == "iam.list_attached_role_policies":
             raise AwsProviderError(
                 "AWS SDK operation failed: iam.list_attached_role_policies AccessDenied"
@@ -302,6 +306,75 @@ class InlineFallbackTests(unittest.TestCase):
         self.assertEqual(identity_rows.get("iam.list_role_policies"), "evaluated")
         unknown_layers = {entry["layer"] for entry in result["unknowns"]}
         self.assertIn("identity_policy", unknown_layers)
+
+
+class GuessedRoleNameProvider:
+    """The caller passed a role name that does not exist (agents guess
+    names on real accounts every day); role listing is granted."""
+
+    def __init__(self) -> None:
+        self.policy_reads: list[str] = []
+
+    def capabilities(self) -> Set[str]:
+        return set(READ_OPERATIONS)
+
+    def caller_identity(self) -> Dict[str, Any]:
+        return {
+            "Account": ACCOUNT,
+            "Arn": f"arn:aws:iam::{ACCOUNT}:user/operator",
+        }
+
+    def get_bucket_policy(self, bucket: str) -> Optional[Dict[str, Any]]:
+        return None
+
+    def get_public_access_block(self, bucket: str) -> Dict[str, Any]:
+        return {"BlockPublicAcls": False}
+
+    def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
+        if operation == "iam.get_role":
+            raise AwsProviderError(
+                "AWS SDK operation failed: iam.get_role NoSuchEntity: The role "
+                f"with name {parameters['RoleName']} cannot be found."
+            )
+        if operation == "iam.list_roles":
+            return {
+                "Roles": [
+                    {"RoleName": "cloudarch-workload-cc8643"},
+                    {"RoleName": "deploy-pipeline"},
+                ]
+            }
+        if operation in ("iam.list_attached_role_policies", "iam.list_role_policies"):
+            self.policy_reads.append(operation)
+            raise AssertionError("policy reads must be skipped for a missing role")
+        raise AssertionError(f"Unexpected operation: {operation} {parameters}")
+
+
+class PrincipalDiscoveryTests(unittest.TestCase):
+    def test_missing_role_gets_discovery_help_instead_of_wasted_reads(self) -> None:
+        provider = GuessedRoleNameProvider()
+        result = _call(
+            _server(provider),
+            {
+                "action": "s3:GetObject",
+                "resource": "arn:aws:s3:::app-data/config.json",
+                "principal": f"arn:aws:iam::{ACCOUNT}:role/workload-role",
+                "profile": "test-sso",
+                "region": "us-east-1",
+            },
+        )
+
+        self.assertEqual(result["status"], "insufficient_access")
+        self.assertEqual(result["verdict"]["blocking_layer"], "unknown")
+        identity_unknowns = [
+            entry for entry in result["unknowns"] if entry["layer"] == "identity_policy"
+        ]
+        (unknown,) = identity_unknowns
+        self.assertIn("was not found", unknown["detail"])
+        self.assertIn("cloudarch-workload-cc8643", unknown["detail"])
+        self.assertIn("exact role ARN", unknown["detail"])
+        self.assertEqual(provider.policy_reads, [])
+        reads = {entry["read"] for entry in result["evaluation_ledger"]}
+        self.assertIn("iam.get_role", reads)
 
 
 class OperatorUserCallerProvider:

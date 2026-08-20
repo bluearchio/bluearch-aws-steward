@@ -1356,6 +1356,69 @@ class StewardMcpServer:
         elif principal.startswith(role_prefix):
             role_name = principal.removeprefix(role_prefix).rsplit("/", 1)[-1]
 
+            # Agents guess role names on real accounts every day. Confirm
+            # the role exists before spending policy reads on it, and when
+            # it does not, hand back the discovery help a human expert
+            # would ("did you mean...?") instead of two wasted denials.
+            role_missing = False
+            try:
+                client.read("iam.get_role", RoleName=role_name)
+                ledger.append(
+                    {"layer": "identity_policy", "read": "iam.get_role", "result": "evaluated"}
+                )
+            except AwsProviderError as exc:
+                detail = str(exc)
+                lowered = detail.lower()
+                if (
+                    "nosuchentity" in lowered
+                    or "cannot be found" in lowered
+                    or "not found" in lowered
+                ):
+                    role_missing = True
+                    candidates: List[str] = []
+                    total_roles = 0
+                    try:
+                        listing = client.read("iam.list_roles")
+                        names = [
+                            str(role.get("RoleName"))
+                            for role in listing.get("Roles") or []
+                            if role.get("RoleName")
+                        ]
+                        total_roles = len(names)
+                        candidates = names[:10]
+                    except AwsProviderError:
+                        pass
+                    ledger.append(
+                        {
+                            "layer": "identity_policy",
+                            "read": "iam.get_role",
+                            "result": "access_denied",
+                        }
+                    )
+                    discovery = f"Role '{role_name}' was not found in account {account_id}."
+                    if candidates:
+                        discovery += (
+                            f" Roles present ({total_roles} total): " + ", ".join(candidates) + "."
+                        )
+                    discovery += " Re-run with the exact role ARN."
+                    unknowns.append(
+                        {
+                            "layer": "identity_policy",
+                            "reason": "read_denied",
+                            "detail": discovery,
+                        }
+                    )
+                else:
+                    # A denied existence check is not fatal: some accounts
+                    # deny iam:GetRole while still granting policy reads.
+                    ledger.append(
+                        {
+                            "layer": "identity_policy",
+                            "read": "iam.get_role",
+                            "result": "access_denied",
+                        }
+                    )
+
             def _read_attached_policies() -> List[JSON]:
                 documents: List[JSON] = []
                 attached = client.read("iam.list_attached_role_policies", RoleName=role_name)
@@ -1391,23 +1454,26 @@ class StewardMcpServer:
             # attached listing with readable inline policies is normal
             # least-privilege reality, never a reason to abort the whole
             # identity evaluation (sweep-diagnosis-2026-08-19 defect).
-            attached_documents = (
-                _gather(
-                    "identity_policy",
-                    "iam.list_attached_role_policies",
-                    _read_attached_policies,
+            if role_missing:
+                identity_policies = []
+            else:
+                attached_documents = (
+                    _gather(
+                        "identity_policy",
+                        "iam.list_attached_role_policies",
+                        _read_attached_policies,
+                    )
+                    or []
                 )
-                or []
-            )
-            inline_documents = (
-                _gather(
-                    "identity_policy",
-                    "iam.list_role_policies",
-                    _read_inline_policies,
+                inline_documents = (
+                    _gather(
+                        "identity_policy",
+                        "iam.list_role_policies",
+                        _read_inline_policies,
+                    )
+                    or []
                 )
-                or []
-            )
-            identity_policies = attached_documents + inline_documents
+                identity_policies = attached_documents + inline_documents
         else:
             ledger.append(
                 {
