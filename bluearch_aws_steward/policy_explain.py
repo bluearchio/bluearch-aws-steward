@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 JSON = Dict[str, Any]
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 # Frozen vocabularies (contract: graders string-match against these; any
 # addition bumps SCHEMA_VERSION).
@@ -32,6 +32,8 @@ BLOCKING_LAYERS = (
     "resource_policy",
     "kms_key_policy",
     "public_access_block",
+    "permission_boundary",
+    "redrive_allow_policy",
     "condition_mismatch",
     "scp",
     "none",
@@ -259,9 +261,21 @@ def evaluate_access(
     resource_policy: Optional[JSON] = None,
     kms_key_policy: Optional[JSON] = None,
     public_access_block: Optional[JSON] = None,
+    permission_boundary: Optional[JSON] = None,
+    redrive_allow_policy: Optional[JSON] = None,
 ) -> Evaluation:
+    if redrive_allow_policy is not None:
+        return _evaluate_redrive_allow(request, redrive_allow_policy)
     identity_policies = list(identity_policies or [])
+    boundary_arn = str((permission_boundary or {}).get("arn") or "")
+    boundary_document = (permission_boundary or {}).get("document")
     statements = _layer_statements(request, identity_policies, resource_policy, kms_key_policy)
+    if isinstance(boundary_document, dict):
+        for index, statement in enumerate(boundary_document.get("Statement") or []):
+            if isinstance(statement, dict):
+                statements.append(
+                    _LayerStatement("permission_boundary", boundary_arn, index, statement)
+                )
     anonymous = _is_public_principal(request.principal)
     service = _is_service_principal(request.principal)
 
@@ -274,7 +288,9 @@ def evaluate_access(
             continue
         if not _resource_matches(statement, request.resource):
             continue
-        if entry.layer != "identity_policy" and not _principal_applies(statement, request):
+        if entry.layer not in ("identity_policy", "permission_boundary") and not _principal_applies(
+            statement, request
+        ):
             continue
         status, _detail = _evaluate_conditions(statement, request.condition_context)
         if status != _CONDITION_SATISFIED:
@@ -338,13 +354,30 @@ def evaluate_access(
                 continue
             if not _resource_matches(statement, request.resource):
                 continue
-            if entry.layer != "identity_policy" and not _principal_applies(statement, request):
+            if entry.layer not in (
+                "identity_policy",
+                "permission_boundary",
+            ) and not _principal_applies(statement, request):
                 continue
             status, detail = _evaluate_conditions(statement, request.condition_context)
             if status == _CONDITION_SATISFIED:
                 return entry, near_misses
             near_misses.append((entry, status, detail or {}))
         return None, near_misses
+
+    def _boundary_gate(identity_allow: _LayerStatement) -> Optional[Evaluation]:
+        """A permissions boundary limits identity-based allows: the
+        boundary must also allow the action, or it is the blocking layer.
+        Resource-based grants naming the principal are not limited."""
+        if not isinstance(boundary_document, dict):
+            return None
+        boundary_allow, boundary_misses = _allow_search(["permission_boundary"])
+        if boundary_allow is not None:
+            return None
+        del identity_allow
+        return _blocked_result(
+            request, "permission_boundary", boundary_misses, carrier=boundary_arn
+        )
 
     if kms_key_policy is not None:
         # KMS: the key policy is authoritative. A direct grant suffices;
@@ -367,6 +400,9 @@ def evaluate_access(
         if delegates and identity_policies:
             identity_allow, _identity_misses = _allow_search(["identity_policy"])
             if identity_allow is not None:
+                blocked_by_boundary = _boundary_gate(identity_allow)
+                if blocked_by_boundary is not None:
+                    return blocked_by_boundary
                 return _allow_result(request, identity_allow)
         return _blocked_result(request, "kms_key_policy", key_misses)
 
@@ -381,12 +417,96 @@ def evaluate_access(
     # Same-account IAM principal: identity policy OR resource policy allow.
     allow, misses = _allow_search(["identity_policy", "resource_policy"])
     if allow is not None:
+        if allow.layer == "identity_policy":
+            blocked_by_boundary = _boundary_gate(allow)
+            if blocked_by_boundary is not None:
+                return blocked_by_boundary
         return _allow_result(request, allow)
     return _blocked_result(
         request,
         "identity_policy",
         misses,
         near_misses_by_resource=_resource_near_misses(request, statements),
+    )
+
+
+def _evaluate_redrive_allow(request: AccessRequest, control: JSON) -> Evaluation:
+    """SQS DLQ redrive is governed by the RedriveAllowPolicy queue control,
+    not IAM: allowAll (the default when absent), denyAll, or byQueue with
+    explicit source queue ARNs matched against aws:SourceArn."""
+    permission = str(control.get("redrivePermission") or "allowAll")
+    carrier = request.resource
+    if permission == "denyAll":
+        return Evaluation(
+            verdict=_verdict("explicit_deny", "redrive_allow_policy"),
+            claims=[
+                _claim(
+                    "blocking_control",
+                    "redrive_allow_policy",
+                    None,
+                    "The queue's RedriveAllowPolicy is denyAll: no source queue "
+                    "may use it as a dead-letter target.",
+                    carrier=carrier,
+                )
+            ],
+        )
+    if permission == "byQueue":
+        sources = _string_values(control.get("sourceQueueArns"))
+        got = request.condition_context.get("aws:SourceArn")
+        if got is None:
+            return Evaluation(
+                verdict=_verdict("conditional", "redrive_allow_policy"),
+                claims=[
+                    _claim(
+                        "blocking_control",
+                        "redrive_allow_policy",
+                        None,
+                        "The queue's RedriveAllowPolicy is byQueue for "
+                        f"{', '.join(sources[:5])}; supply the source queue ARN "
+                        "as aws:SourceArn in condition_context to decide.",
+                        carrier=carrier,
+                    )
+                ],
+            )
+        if any(_pattern_matches(source, str(got)) for source in sources):
+            return Evaluation(
+                verdict=_verdict("allow", "none"),
+                claims=[
+                    _claim(
+                        "satisfied_layer",
+                        "redrive_allow_policy",
+                        None,
+                        f"RedriveAllowPolicy permits source queue {got}.",
+                        carrier=carrier,
+                    )
+                ],
+            )
+        return Evaluation(
+            verdict=_verdict("explicit_deny", "redrive_allow_policy"),
+            claims=[
+                _claim(
+                    "blocking_control",
+                    "redrive_allow_policy",
+                    None,
+                    "The queue's RedriveAllowPolicy is byQueue and permits only "
+                    f"{', '.join(sources[:5])}; the requesting source queue "
+                    f"{got} is not among them.",
+                    carrier=carrier,
+                )
+            ],
+        )
+    return Evaluation(
+        verdict=_verdict("allow", "none"),
+        claims=[
+            _claim(
+                "satisfied_layer",
+                "redrive_allow_policy",
+                None,
+                "The queue's RedriveAllowPolicy is allowAll (the default when "
+                "the control is absent).",
+                carrier=carrier,
+            )
+        ],
     )
 
 
@@ -421,7 +541,9 @@ def _resource_near_misses(request: AccessRequest, statements: List[_LayerStateme
             continue
         if _resource_matches(statement, request.resource):
             continue
-        if entry.layer != "identity_policy" and not _principal_applies(statement, request):
+        if entry.layer not in ("identity_policy", "permission_boundary") and not _principal_applies(
+            statement, request
+        ):
             continue
         scope = ", ".join(_string_values(statement.get("Resource"))[:3])
         kind = "denying_statement" if effect == "Deny" else "missing_permission"
@@ -448,6 +570,7 @@ def _blocked_result(
     near_misses: List[Tuple[_LayerStatement, str, JSON]],
     *,
     near_misses_by_resource: Optional[List[JSON]] = None,
+    carrier: Optional[str] = None,
 ) -> Evaluation:
     for entry, status, detail in near_misses:
         if status == "missing_key":
@@ -493,9 +616,12 @@ def _blocked_result(
                 f"{request.principal}; the smallest missing grant is an Allow for "
                 f"{request.action} on {request.resource} in the "
                 f"{default_layer.replace('_', ' ')}.",
-                carrier=request.resource
-                if default_layer in ("resource_policy", "kms_key_policy")
-                else request.principal,
+                carrier=carrier
+                or (
+                    request.resource
+                    if default_layer in ("resource_policy", "kms_key_policy")
+                    else request.principal
+                ),
             ),
             *extra_claims,
         ],
