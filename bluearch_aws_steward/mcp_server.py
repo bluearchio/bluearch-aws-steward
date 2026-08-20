@@ -1249,6 +1249,67 @@ class StewardMcpServer:
             **({"next": residual_next} if residual else {}),
         }
 
+    def _multi_subject_resolution(
+        self,
+        arguments: JSON,
+        account_id: str,
+        client: AwsProvider,
+    ) -> Optional[JSON]:
+        """No principal was given: evaluate the visible candidate roles in
+        one pass (bounded at three). Exactly one blocked candidate means
+        the ticket's actual question has an answer -- return it as that
+        subject, explicitly labeled. Anything ambiguous falls back to the
+        candidate listing."""
+        try:
+            listing = client.read("iam.list_roles")
+        except AwsProviderError:
+            return None
+        names = [
+            str(role.get("RoleName")) for role in listing.get("Roles") or [] if role.get("RoleName")
+        ]
+        if not names or len(names) > 3:
+            return None
+        blocked: List[Tuple[str, JSON]] = []
+        allowed: List[str] = []
+        undecided = 0
+        for name in names:
+            role_arn = f"arn:aws:iam::{account_id}:role/{name}"
+            try:
+                candidate = self._tool_explain_denial({**arguments, "principal": role_arn})
+            except (McpToolError, AwsProviderError):
+                undecided += 1
+                continue
+            status = str(candidate.get("status") or "")
+            effect = str((candidate.get("verdict") or {}).get("effect") or "")
+            if status == "explained" and effect in (
+                "explicit_deny",
+                "implicit_deny",
+                "conditional",
+            ):
+                blocked.append((name, candidate))
+            elif status == "not_denied":
+                allowed.append(name)
+            else:
+                undecided += 1
+        if len(blocked) != 1 or undecided:
+            return None
+        subject, response = blocked[0]
+        note = {
+            "layer": "identity_policy",
+            "reason": "not_applicable",
+            "detail": (
+                "No principal was supplied; Steward evaluated the visible "
+                f"candidate roles in one pass: {', '.join(sorted(allowed))} "
+                f"allowed; '{subject}' blocked. This answer is for role "
+                f"'{subject}' -- pass an explicit principal to diagnose a "
+                "different subject."
+            ),
+        }
+        unknowns = list(response.get("unknowns") or [])
+        unknowns.insert(0, note)
+        response["unknowns"] = unknowns
+        return response
+
     def _tool_explain_denial(self, arguments: JSON) -> JSON:
         action = str(arguments.get("action") or "").strip()
         resource = str(arguments.get("resource") or "").strip()
@@ -1579,6 +1640,10 @@ class StewardMcpServer:
                             }
                         )
         else:
+            if not principal_argument:
+                resolved = self._multi_subject_resolution(arguments, account_id, client)
+                if resolved is not None:
+                    return resolved
             ledger.append(
                 {
                     "layer": "identity_policy",

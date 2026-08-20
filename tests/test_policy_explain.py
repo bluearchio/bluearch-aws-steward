@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unittest
 
-from bluearch_aws_steward.policy_explain import AccessRequest, evaluate_access
+from bluearch_aws_steward.policy_explain import AccessRequest, _evaluate_conditions, evaluate_access
 
 ACCOUNT = "123456789012"
 ROLE = f"arn:aws:iam::{ACCOUNT}:role/workload"
@@ -28,6 +28,96 @@ def _request(action: str, resource: str, principal: str = ROLE, **context: str) 
         account_id=ACCOUNT,
         condition_context=dict(context),
     )
+
+
+class ConditionOperatorTests(unittest.TestCase):
+    """Documented AWS condition semantics, computed exactly."""
+
+    def _status(self, condition, context):
+        status, _detail = _evaluate_conditions({"Condition": condition}, context)
+        return status
+
+    def test_string_not_equals_mismatching_value_is_satisfied(self) -> None:
+        self.assertEqual(
+            self._status(
+                {"StringNotEquals": {"aws:SourceAccount": "111111111111"}},
+                {"aws:SourceAccount": "222222222222"},
+            ),
+            "satisfied",
+        )
+
+    def test_string_not_equals_matching_value_is_a_mismatch(self) -> None:
+        self.assertEqual(
+            self._status(
+                {"StringNotEquals": {"aws:SourceAccount": "111111111111"}},
+                {"aws:SourceAccount": "111111111111"},
+            ),
+            "mismatch",
+        )
+
+    def test_negated_operator_with_absent_key_is_satisfied(self) -> None:
+        # AWS: negated condition operators evaluate true when the key is
+        # absent from the request context.
+        self.assertEqual(
+            self._status({"StringNotEquals": {"aws:SourceAccount": "111111111111"}}, {}),
+            "satisfied",
+        )
+
+    def test_arn_not_like_blocks_matching_pattern(self) -> None:
+        self.assertEqual(
+            self._status(
+                {"ArnNotLike": {"aws:SourceArn": "arn:aws:sns:*:111111111111:*"}},
+                {"aws:SourceArn": "arn:aws:sns:us-east-1:111111111111:topic"},
+            ),
+            "mismatch",
+        )
+
+    def test_null_true_requires_the_key_absent(self) -> None:
+        self.assertEqual(
+            self._status({"Null": {"aws:TokenIssueTime": "true"}}, {}),
+            "satisfied",
+        )
+        self.assertEqual(
+            self._status(
+                {"Null": {"aws:TokenIssueTime": "true"}}, {"aws:TokenIssueTime": "2026-01-01"}
+            ),
+            "mismatch",
+        )
+
+    def test_if_exists_with_absent_key_is_satisfied(self) -> None:
+        self.assertEqual(
+            self._status({"StringEqualsIfExists": {"aws:SourceVpce": "vpce-1"}}, {}),
+            "satisfied",
+        )
+        self.assertEqual(
+            self._status(
+                {"StringEqualsIfExists": {"aws:SourceVpce": "vpce-1"}}, {"aws:SourceVpce": "vpce-2"}
+            ),
+            "mismatch",
+        )
+
+    def test_ip_address_cidr_containment(self) -> None:
+        self.assertEqual(
+            self._status(
+                {"IpAddress": {"aws:SourceIp": "10.0.0.0/8"}}, {"aws:SourceIp": "10.1.2.3"}
+            ),
+            "satisfied",
+        )
+        self.assertEqual(
+            self._status(
+                {"NotIpAddress": {"aws:SourceIp": "10.0.0.0/8"}}, {"aws:SourceIp": "10.1.2.3"}
+            ),
+            "mismatch",
+        )
+
+    def test_unknown_operator_stays_unsupported(self) -> None:
+        self.assertEqual(
+            self._status(
+                {"DateGreaterThan": {"aws:CurrentTime": "2026-01-01T00:00:00Z"}},
+                {"aws:CurrentTime": "2026-02-01T00:00:00Z"},
+            ),
+            "unsupported",
+        )
 
 
 class ExplicitDenyTests(unittest.TestCase):
