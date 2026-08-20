@@ -62,12 +62,20 @@ _REMEDIATION_OPERATIONS = {
     "public_access_block": "s3.PutPublicAccessBlock",
 }
 
+# mode -> (matcher, negated). Negated operators evaluate true when the
+# key is absent from the request context (documented AWS semantics).
 _CONDITION_OPERATORS = {
-    "StringEquals": "equals",
-    "ArnEquals": "equals",
-    "StringLike": "like",
-    "ArnLike": "like",
-    "Bool": "equals",
+    "StringEquals": ("equals", False),
+    "StringNotEquals": ("equals", True),
+    "StringLike": ("like", False),
+    "StringNotLike": ("like", True),
+    "ArnEquals": ("equals", False),
+    "ArnNotEquals": ("equals", True),
+    "ArnLike": ("like", False),
+    "ArnNotLike": ("like", True),
+    "Bool": ("equals", False),
+    "IpAddress": ("cidr", False),
+    "NotIpAddress": ("cidr", True),
 }
 
 
@@ -161,26 +169,71 @@ def _principal_delegates_to_root(statement: JSON, account_id: str) -> bool:
 _CONDITION_SATISFIED = "satisfied"
 
 
+def _values_match(mode: str, expected_values: List[str], got: str) -> bool:
+    if mode == "equals":
+        return got in expected_values
+    if mode == "like":
+        return any(_pattern_matches(pattern, got) for pattern in expected_values)
+    if mode == "cidr":
+        import ipaddress
+
+        try:
+            address = ipaddress.ip_address(got)
+        except ValueError:
+            return False
+        for expected in expected_values:
+            try:
+                network = ipaddress.ip_network(expected, strict=False)
+            except ValueError:
+                continue
+            if address in network:
+                return True
+        return False
+    raise ValueError(f"unknown condition matcher: {mode}")
+
+
 def _evaluate_conditions(statement: JSON, context: Mapping[str, str]) -> Tuple[str, Optional[JSON]]:
-    """-> (status, detail): 'satisfied' | 'missing_key' | 'mismatch' | 'unsupported'."""
+    """-> (status, detail): 'satisfied' | 'missing_key' | 'mismatch' | 'unsupported'.
+
+    Documented AWS semantics, computed exactly: negated operators are
+    satisfied when the key is absent; ``...IfExists`` is satisfied when
+    the key is absent; ``Null`` tests presence itself.
+    """
     conditions = statement.get("Condition")
     if not isinstance(conditions, dict) or not conditions:
         return _CONDITION_SATISFIED, None
     for operator, pairs in conditions.items():
-        mode = _CONDITION_OPERATORS.get(str(operator))
-        if mode is None:
-            return "unsupported", {"operator": str(operator)}
+        operator_name = str(operator)
         if not isinstance(pairs, dict):
-            return "unsupported", {"operator": str(operator)}
+            return "unsupported", {"operator": operator_name}
+        if operator_name == "Null":
+            for key, expected in pairs.items():
+                expect_absent = str(_string_values(expected)[0]).lower() == "true"
+                is_absent = context.get(str(key)) is None
+                if is_absent != expect_absent:
+                    return "mismatch", {
+                        "key": str(key),
+                        "expected": [f"Null={expect_absent}"],
+                        "got": "absent" if is_absent else str(context.get(str(key))),
+                    }
+            continue
+        if_exists = operator_name.endswith("IfExists")
+        base_name = operator_name.removesuffix("IfExists") if if_exists else operator_name
+        entry = _CONDITION_OPERATORS.get(base_name)
+        if entry is None:
+            return "unsupported", {"operator": operator_name}
+        mode, negated = entry
         for key, expected in pairs.items():
             expected_values = _string_values(expected)
             got = context.get(str(key))
             if got is None:
+                if negated or if_exists:
+                    # Absent key satisfies negated operators and IfExists.
+                    continue
                 return "missing_key", {"key": str(key), "expected": expected_values}
-            if mode == "equals":
-                matched = str(got) in expected_values
-            else:
-                matched = any(_pattern_matches(pattern, str(got)) for pattern in expected_values)
+            matched = _values_match(mode, expected_values, str(got))
+            if negated:
+                matched = not matched
             if not matched:
                 return "mismatch", {
                     "key": str(key),
