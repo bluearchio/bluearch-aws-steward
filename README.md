@@ -293,7 +293,7 @@ rule list and evidence type.
 
 ## Release Status
 
-The current `0.9.0b1` work is a preview candidate, not a stable release.
+The current `0.10.0b1` work is a preview candidate, not a stable release.
 Public-preview and stable-release gates are tracked in
 [`docs/public-release-readiness.md`](docs/public-release-readiness.md). The
 planned progressive result experience is documented in

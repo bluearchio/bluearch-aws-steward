@@ -1,3 +1,3 @@
 """BlueArch AWS Steward."""
 
-__version__ = "0.9.0b1"
+__version__ = "0.10.0b1"

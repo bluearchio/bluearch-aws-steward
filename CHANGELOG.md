@@ -7,6 +7,8 @@ as preview are not covered by a stable API compatibility promise.
 
 ## [Unreleased]
 
+## [0.10.0b1] - Preview candidate
+
 ### Added
 
 - `bluearch_explain_denial` evaluates two new policy layers exactly

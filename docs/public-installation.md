@@ -73,10 +73,10 @@ An MCP client can resolve and cache an exact published version on demand:
 bluearch-steward mcp config --runtime uvx
 ```
 
-For `0.9.0b1`, the generated server command is equivalent to:
+For `0.10.0b1`, the generated server command is equivalent to:
 
 ```bash
-uvx --from bluearch-aws-steward==0.9.0b1 bluearch-steward-mcp
+uvx --from bluearch-aws-steward==0.10.0b1 bluearch-steward-mcp
 ```
 
 Persistent `pip` or `uv tool` installation remains the default because startup
