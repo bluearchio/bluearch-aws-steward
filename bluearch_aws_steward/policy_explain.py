@@ -382,7 +382,12 @@ def evaluate_access(
     allow, misses = _allow_search(["identity_policy", "resource_policy"])
     if allow is not None:
         return _allow_result(request, allow)
-    return _blocked_result(request, "identity_policy", misses)
+    return _blocked_result(
+        request,
+        "identity_policy",
+        misses,
+        near_misses_by_resource=_resource_near_misses(request, statements),
+    )
 
 
 def _allow_result(request: AccessRequest, entry: _LayerStatement) -> Evaluation:
@@ -401,10 +406,48 @@ def _allow_result(request: AccessRequest, entry: _LayerStatement) -> Evaluation:
     )
 
 
+def _resource_near_misses(request: AccessRequest, statements: List[_LayerStatement]) -> List[JSON]:
+    """Statements that match the requested ACTION on a different resource
+    scope. Naming them (with their real Sids and honest scoping) is what
+    an expert does when the caller asked about the wrong resource shape --
+    e.g. a bucket ARN for an object-level action."""
+    claims: List[JSON] = []
+    for entry in statements:
+        statement = entry.statement
+        effect = statement.get("Effect")
+        if effect not in ("Allow", "Deny"):
+            continue
+        if not _action_matches(statement, request.action):
+            continue
+        if _resource_matches(statement, request.resource):
+            continue
+        if entry.layer != "identity_policy" and not _principal_applies(statement, request):
+            continue
+        scope = ", ".join(_string_values(statement.get("Resource"))[:3])
+        kind = "denying_statement" if effect == "Deny" else "missing_permission"
+        verb = "denies" if effect == "Deny" else "grants"
+        claims.append(
+            _claim(
+                kind,
+                entry.layer,
+                entry,
+                f"Statement {statement.get('Sid') or f'#{entry.index}'} {verb} "
+                f"{request.action}, but only on {scope} -- the requested resource "
+                f"{request.resource} does not match. If you meant an object or a "
+                "narrower resource, re-run with that exact ARN.",
+            )
+        )
+        if len(claims) >= 2:
+            break
+    return claims
+
+
 def _blocked_result(
     request: AccessRequest,
     default_layer: str,
     near_misses: List[Tuple[_LayerStatement, str, JSON]],
+    *,
+    near_misses_by_resource: Optional[List[JSON]] = None,
 ) -> Evaluation:
     for entry, status, detail in near_misses:
         if status == "missing_key":
@@ -438,6 +481,7 @@ def _blocked_result(
                     )
                 ],
             )
+    extra_claims = list(near_misses_by_resource or [])
     return Evaluation(
         verdict=_verdict("implicit_deny", default_layer),
         claims=[
@@ -452,7 +496,8 @@ def _blocked_result(
                 carrier=request.resource
                 if default_layer in ("resource_policy", "kms_key_policy")
                 else request.principal,
-            )
+            ),
+            *extra_claims,
         ],
     )
 

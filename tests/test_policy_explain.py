@@ -107,6 +107,50 @@ class ExplicitDenyTests(unittest.TestCase):
         self.assertEqual(evaluation.claims[0]["kind"], "satisfied_layer")
 
 
+class ResourceNearMissTests(unittest.TestCase):
+    def test_action_matching_statements_surface_as_near_misses(self) -> None:
+        # Asking about the bucket ARN when the statements scope objects:
+        # the decisive claim is the honest missing_permission, but the
+        # expert also names the statements that match the ACTION with a
+        # different resource scope -- including the planted deny.
+        evaluation = evaluate_access(
+            _request("s3:GetObject", BUCKET_ARN),
+            identity_policies=[
+                {
+                    "Statement": [
+                        {
+                            "Sid": "AllowReads",
+                            "Effect": "Allow",
+                            "Action": "s3:GetObject",
+                            "Resource": "arn:aws:s3:::app-data/*",
+                        },
+                        {
+                            "Sid": "FaultTargetReadDeny",
+                            "Effect": "Deny",
+                            "Action": "s3:GetObject",
+                            "Resource": "arn:aws:s3:::app-data/config*",
+                        },
+                    ]
+                }
+            ],
+        )
+
+        self.assertEqual(evaluation.verdict["effect"], "implicit_deny")
+        self.assertEqual(evaluation.claims[0]["kind"], "missing_permission")
+        near_sids = [
+            (claim.get("policy_ref") or {}).get("statement_sid") for claim in evaluation.claims[1:]
+        ]
+        self.assertIn("FaultTargetReadDeny", near_sids)
+        self.assertIn("AllowReads", near_sids)
+        deny_claim = next(
+            claim
+            for claim in evaluation.claims[1:]
+            if (claim.get("policy_ref") or {}).get("statement_sid") == "FaultTargetReadDeny"
+        )
+        self.assertEqual(deny_claim["kind"], "denying_statement")
+        self.assertIn("does not match", deny_claim["explanation"])
+
+
 class KmsKeyPolicyTests(unittest.TestCase):
     def test_key_policy_excluding_the_principal_blocks_despite_identity_allow(self) -> None:
         # Defect classes: kms-key-policy-excludes-workload, s3-upload-kms-denied

@@ -850,6 +850,15 @@ class StewardMcpServer:
             return _tool_error_response(request_id, detail)
         except ValueError as exc:
             return _tool_error_response(request_id, str(exc))
+        except Exception as exc:  # noqa: BLE001 -- the stdio server must never die on a tool call
+            return _tool_error_response(
+                request_id,
+                (
+                    "internal error while handling this tool call: "
+                    f"{exc.__class__.__name__}: {str(exc)[:200]}. The server is "
+                    "still running; adjust the arguments or report this."
+                ),
+            )
 
         return {
             "jsonrpc": "2.0",
