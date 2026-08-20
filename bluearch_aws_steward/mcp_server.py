@@ -1298,6 +1298,24 @@ class StewardMcpServer:
             ledger.append({"layer": layer, "read": read_name, "result": "evaluated"})
             return value
 
+        def _visible_roles_hint() -> str:
+            try:
+                listing = client.read("iam.list_roles")
+            except AwsProviderError:
+                return ""
+            names = [
+                str(role.get("RoleName"))
+                for role in listing.get("Roles") or []
+                if role.get("RoleName")
+            ]
+            if not names:
+                return ""
+            return (
+                f" Roles visible in account {account_id} ({len(names)} total): "
+                + ", ".join(names[:10])
+                + "."
+            )
+
         resource_policy: Optional[JSON] = None
         kms_key_policy: Optional[JSON] = None
         public_access_block: Optional[JSON] = None
@@ -1474,6 +1492,36 @@ class StewardMcpServer:
                     or []
                 )
                 identity_policies = attached_documents + inline_documents
+                if (
+                    not identity_policies
+                    and len(
+                        [
+                            entry
+                            for entry in unknowns
+                            if entry.get("layer") == "identity_policy"
+                            and entry.get("reason") == "read_denied"
+                        ]
+                    )
+                    >= 2
+                ):
+                    # Scoped permissions and a guessed role name are
+                    # indistinguishable from the caller's seat (AWS never
+                    # provides an existence oracle on denial); offer what
+                    # an expert offers next -- the roles this identity CAN
+                    # see -- instead of a dead end.
+                    hint = _visible_roles_hint()
+                    if hint:
+                        unknowns.append(
+                            {
+                                "layer": "identity_policy",
+                                "reason": "read_denied",
+                                "detail": (
+                                    f"Every policy read on role '{role_name}' was "
+                                    "denied; if the name was a guess, re-run with "
+                                    "the exact role ARN." + hint
+                                ),
+                            }
+                        )
         else:
             ledger.append(
                 {
@@ -1488,7 +1536,9 @@ class StewardMcpServer:
                     "reason": "not_evaluated_v1",
                     "detail": (
                         "Only same-account IAM roles have their identity policies "
-                        f"collected in v1; principal is {principal}."
+                        f"collected in v1; principal is {principal}. Pass the "
+                        "workload's role ARN as principal to evaluate its policies."
+                        + _visible_roles_hint()
                     ),
                 }
             )

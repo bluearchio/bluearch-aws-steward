@@ -400,11 +400,83 @@ class ServicePrincipalGuardTests(unittest.TestCase):
         self.assertFalse([read for read in provider.reads if read.startswith("iam.")])
 
 
+class ScopedDenialRoleProvider:
+    """Real-AWS shape: permissions scoped to the real role ARN, so reads
+    on a guessed name return AccessDenied (never an existence oracle);
+    listing roles is granted."""
+
+    def capabilities(self) -> Set[str]:
+        return set(READ_OPERATIONS)
+
+    def caller_identity(self) -> Dict[str, Any]:
+        return {
+            "Account": ACCOUNT,
+            "Arn": f"arn:aws:iam::{ACCOUNT}:user/operator",
+        }
+
+    def get_bucket_policy(self, bucket: str) -> Optional[Dict[str, Any]]:
+        return None
+
+    def get_public_access_block(self, bucket: str) -> Dict[str, Any]:
+        return {"BlockPublicAcls": False}
+
+    def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
+        if operation == "iam.list_roles":
+            return {"Roles": [{"RoleName": "cloudarch-workload-cc8643"}]}
+        if operation in (
+            "iam.get_role",
+            "iam.list_attached_role_policies",
+            "iam.list_role_policies",
+        ):
+            raise AwsProviderError(f"AWS SDK operation failed: {operation} AccessDenied")
+        raise AssertionError(f"Unexpected operation: {operation} {parameters}")
+
+
+class RoleDiscoveryHintTests(unittest.TestCase):
+    def test_denied_role_evaluation_still_offers_the_visible_roles(self) -> None:
+        result = _call(
+            _server(ScopedDenialRoleProvider()),
+            {
+                "action": "s3:GetObject",
+                "resource": "arn:aws:s3:::app-data/config.json",
+                "principal": f"arn:aws:iam::{ACCOUNT}:role/guessed-name",
+                "profile": "test-sso",
+                "region": "us-east-1",
+            },
+        )
+
+        self.assertEqual(result["status"], "insufficient_access")
+        details = " ".join(str(entry.get("detail")) for entry in result["unknowns"])
+        self.assertIn("cloudarch-workload-cc8643", details)
+        self.assertIn("exact role ARN", details)
+
+    def test_out_of_scope_caller_without_principal_gets_role_candidates(self) -> None:
+        result = _call(
+            _server(ScopedDenialRoleProvider()),
+            {
+                "action": "s3:GetObject",
+                "resource": "arn:aws:s3:::app-data/config.json",
+                "profile": "test-sso",
+                "region": "us-east-1",
+            },
+        )
+
+        self.assertEqual(result["status"], "insufficient_access")
+        details = " ".join(str(entry.get("detail")) for entry in result["unknowns"])
+        self.assertIn("cloudarch-workload-cc8643", details)
+        self.assertIn("principal", details)
+
+
 class OperatorUserCallerProvider:
     """Caller is an IAM user (outside v1 identity collection)."""
 
     def capabilities(self) -> Set[str]:
         return set(READ_OPERATIONS)
+
+    def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
+        if operation == "iam.list_roles":
+            return {"Roles": []}
+        raise AssertionError(f"Unexpected operation: {operation} {parameters}")
 
     def caller_identity(self) -> Dict[str, Any]:
         return {
