@@ -377,6 +377,29 @@ class PrincipalDiscoveryTests(unittest.TestCase):
         self.assertIn("iam.get_role", reads)
 
 
+class ServicePrincipalGuardTests(unittest.TestCase):
+    def test_service_principals_never_trigger_role_existence_checks(self) -> None:
+        """A service principal is not a role: no iam.* read may fire.
+        Pinned at the harness owner's request -- the certification probe
+        runs with principal sns.amazonaws.com against a LocalEmu without
+        the iam service, and this is also correct on real AWS."""
+        provider = QueuePolicyProvider()
+        result = _call(
+            _server(provider),
+            {
+                "action": "sqs:SendMessage",
+                "resource": QUEUE_ARN,
+                "principal": "sns.amazonaws.com",
+                "condition_context": {"aws:SourceArn": TOPIC_ARN},
+                "profile": "test-sso",
+                "region": "us-east-1",
+            },
+        )
+
+        self.assertEqual(result["status"], "explained")
+        self.assertFalse([read for read in provider.reads if read.startswith("iam.")])
+
+
 class OperatorUserCallerProvider:
     """Caller is an IAM user (outside v1 identity collection)."""
 
