@@ -377,6 +377,170 @@ class KmsKeyPolicyTests(unittest.TestCase):
         self.assertEqual(evaluation.verdict["effect"], "allow")
 
 
+class PermissionBoundaryTests(unittest.TestCase):
+    BOUNDARY_ARN = f"arn:aws:iam::{ACCOUNT}:policy/team-boundary"
+
+    def test_boundary_without_the_action_blocks_despite_identity_allow(self) -> None:
+        evaluation = evaluate_access(
+            _request("s3:PutObject", OBJECT_ARN),
+            identity_policies=[
+                {
+                    "Statement": [
+                        {
+                            "Sid": "AllowWrites",
+                            "Effect": "Allow",
+                            "Action": "s3:PutObject",
+                            "Resource": "arn:aws:s3:::app-data/*",
+                        }
+                    ]
+                }
+            ],
+            permission_boundary={
+                "arn": self.BOUNDARY_ARN,
+                "document": {
+                    "Statement": [
+                        {
+                            "Sid": "BoundaryReadOnly",
+                            "Effect": "Allow",
+                            "Action": ["s3:GetObject", "s3:ListBucket"],
+                            "Resource": "*",
+                        }
+                    ]
+                },
+            },
+        )
+
+        self.assertEqual(evaluation.verdict["effect"], "implicit_deny")
+        self.assertEqual(evaluation.verdict["blocking_layer"], "permission_boundary")
+        decisive = evaluation.claims[0]
+        self.assertEqual(decisive["kind"], "missing_permission")
+        self.assertEqual(decisive["policy_ref"]["resource"], self.BOUNDARY_ARN)
+
+    def test_boundary_deny_wins_with_its_statement_named(self) -> None:
+        evaluation = evaluate_access(
+            _request("s3:PutObject", OBJECT_ARN),
+            identity_policies=[
+                {
+                    "Statement": [
+                        {
+                            "Sid": "AllowWrites",
+                            "Effect": "Allow",
+                            "Action": "s3:*",
+                            "Resource": "*",
+                        }
+                    ]
+                }
+            ],
+            permission_boundary={
+                "arn": self.BOUNDARY_ARN,
+                "document": {
+                    "Statement": [
+                        {
+                            "Sid": "BoundaryNoWrites",
+                            "Effect": "Deny",
+                            "Action": "s3:PutObject",
+                            "Resource": "*",
+                        },
+                        {
+                            "Sid": "BoundaryWide",
+                            "Effect": "Allow",
+                            "Action": "*",
+                            "Resource": "*",
+                        },
+                    ]
+                },
+            },
+        )
+
+        self.assertEqual(evaluation.verdict["effect"], "explicit_deny")
+        self.assertEqual(evaluation.verdict["blocking_layer"], "permission_boundary")
+        decisive = evaluation.claims[0]
+        self.assertEqual(decisive["kind"], "denying_statement")
+        self.assertEqual(decisive["policy_ref"]["statement_sid"], "BoundaryNoWrites")
+
+    def test_boundary_and_identity_both_allowing_is_an_allow(self) -> None:
+        evaluation = evaluate_access(
+            _request("s3:GetObject", OBJECT_ARN),
+            identity_policies=[
+                {
+                    "Statement": [
+                        {
+                            "Sid": "AllowReads",
+                            "Effect": "Allow",
+                            "Action": "s3:GetObject",
+                            "Resource": "arn:aws:s3:::app-data/*",
+                        }
+                    ]
+                }
+            ],
+            permission_boundary={
+                "arn": self.BOUNDARY_ARN,
+                "document": {
+                    "Statement": [
+                        {
+                            "Sid": "BoundaryReads",
+                            "Effect": "Allow",
+                            "Action": "s3:Get*",
+                            "Resource": "*",
+                        }
+                    ]
+                },
+            },
+        )
+
+        self.assertEqual(evaluation.verdict["effect"], "allow")
+
+
+class RedriveAllowPolicyTests(unittest.TestCase):
+    DLQ_ARN = f"arn:aws:sqs:us-east-1:{ACCOUNT}:orders-dlq"
+    SOURCE_ARN = f"arn:aws:sqs:us-east-1:{ACCOUNT}:orders"
+
+    def _evaluate(self, redrive_allow, **context):
+        return evaluate_access(
+            AccessRequest(
+                action="sqs:SendMessage",
+                resource=self.DLQ_ARN,
+                principal="sqs.amazonaws.com",
+                account_id=ACCOUNT,
+                condition_context=dict(context),
+            ),
+            redrive_allow_policy=redrive_allow,
+        )
+
+    def test_deny_all_blocks_the_redrive_flow(self) -> None:
+        evaluation = self._evaluate({"redrivePermission": "denyAll"})
+        self.assertEqual(evaluation.verdict["effect"], "explicit_deny")
+        self.assertEqual(evaluation.verdict["blocking_layer"], "redrive_allow_policy")
+        self.assertEqual(evaluation.claims[0]["kind"], "blocking_control")
+
+    def test_by_queue_mismatch_names_the_expected_sources(self) -> None:
+        evaluation = self._evaluate(
+            {"redrivePermission": "byQueue", "sourceQueueArns": [self.SOURCE_ARN + "-unrelated"]},
+            **{"aws:SourceArn": self.SOURCE_ARN},
+        )
+        self.assertEqual(evaluation.verdict["effect"], "explicit_deny")
+        self.assertEqual(evaluation.verdict["blocking_layer"], "redrive_allow_policy")
+        self.assertIn(self.SOURCE_ARN, evaluation.claims[0]["explanation"])
+
+    def test_by_queue_without_context_is_conditional(self) -> None:
+        evaluation = self._evaluate(
+            {"redrivePermission": "byQueue", "sourceQueueArns": [self.SOURCE_ARN]}
+        )
+        self.assertEqual(evaluation.verdict["effect"], "conditional")
+
+    def test_allow_all_or_matching_source_is_not_denied(self) -> None:
+        self.assertEqual(
+            self._evaluate({"redrivePermission": "allowAll"}).verdict["effect"], "allow"
+        )
+        self.assertEqual(
+            self._evaluate(
+                {"redrivePermission": "byQueue", "sourceQueueArns": [self.SOURCE_ARN]},
+                **{"aws:SourceArn": self.SOURCE_ARN},
+            ).verdict["effect"],
+            "allow",
+        )
+
+
 class ServiceDeliveryConditionTests(unittest.TestCase):
     def _queue_policy(self, source_arn: str) -> dict:
         return {

@@ -1389,6 +1389,8 @@ class StewardMcpServer:
         resource_policy: Optional[JSON] = None
         kms_key_policy: Optional[JSON] = None
         public_access_block: Optional[JSON] = None
+        permission_boundary: Optional[JSON] = None
+        redrive_allow_policy: Optional[JSON] = None
 
         if service == "s3":
             bucket = resource.removeprefix("arn:aws:s3:::").split("/", 1)[0]
@@ -1405,18 +1407,36 @@ class StewardMcpServer:
         elif service == "sqs":
             queue_name = resource.rsplit(":", 1)[-1]
 
+            queue_attributes: Dict[str, Any] = {}
+            queue_attributes_read = {"ok": False}
+
             def _read_queue_policy() -> Optional[JSON]:
                 url = client.read("sqs.get_queue_url", QueueName=queue_name).get("QueueUrl")
                 attributes = client.read(
                     "sqs.get_queue_attributes",
                     QueueUrl=url,
-                    AttributeNames=["Policy"],
+                    AttributeNames=["Policy", "RedriveAllowPolicy"],
                 )
-                return policy_document((attributes.get("Attributes") or {}).get("Policy"))
+                queue_attributes.update(attributes.get("Attributes") or {})
+                queue_attributes_read["ok"] = True
+                return policy_document(queue_attributes.get("Policy"))
 
             resource_policy = _gather(
                 "resource_policy", "sqs.get_queue_attributes", _read_queue_policy
             )
+            if principal == "sqs.amazonaws.com" and queue_attributes_read["ok"]:
+                # DLQ redrive is governed by the RedriveAllowPolicy queue
+                # control, not IAM; absent means allowAll (the AWS default).
+                redrive_allow_policy = policy_document(
+                    queue_attributes.get("RedriveAllowPolicy")
+                ) or {"redrivePermission": "allowAll"}
+                ledger.append(
+                    {
+                        "layer": "redrive_allow_policy",
+                        "read": "sqs.get_queue_attributes",
+                        "result": "evaluated",
+                    }
+                )
         elif service == "sns":
 
             def _read_topic_policy() -> Optional[JSON]:
@@ -1449,8 +1469,15 @@ class StewardMcpServer:
             # it does not, hand back the discovery help a human expert
             # would ("did you mean...?") instead of two wasted denials.
             role_missing = False
+            boundary_arn = ""
             try:
-                client.read("iam.get_role", RoleName=role_name)
+                role_payload = client.read("iam.get_role", RoleName=role_name)
+                boundary_arn = str(
+                    ((role_payload.get("Role") or {}).get("PermissionsBoundary") or {}).get(
+                        "PermissionsBoundaryArn"
+                    )
+                    or ""
+                )
                 ledger.append(
                     {"layer": "identity_policy", "read": "iam.get_role", "result": "evaluated"}
                 )
@@ -1492,7 +1519,7 @@ class StewardMcpServer:
                     unknowns.append(
                         {
                             "layer": "identity_policy",
-                            "reason": "read_denied",
+                            "reason": "not_found",
                             "detail": discovery,
                         }
                     )
@@ -1562,6 +1589,26 @@ class StewardMcpServer:
                     or []
                 )
                 identity_policies = attached_documents + inline_documents
+                if boundary_arn:
+
+                    def _read_boundary() -> Optional[JSON]:
+                        meta = client.read("iam.get_policy", PolicyArn=boundary_arn)
+                        version_id = (meta.get("Policy") or {}).get("DefaultVersionId")
+                        version = client.read(
+                            "iam.get_policy_version",
+                            PolicyArn=boundary_arn,
+                            VersionId=version_id,
+                        )
+                        return policy_document((version.get("PolicyVersion") or {}).get("Document"))
+
+                    boundary_document = _gather(
+                        "permission_boundary", "iam.get_policy_version", _read_boundary
+                    )
+                    if boundary_document:
+                        permission_boundary = {
+                            "arn": boundary_arn,
+                            "document": boundary_document,
+                        }
                 if (
                     not identity_policies
                     and len(
@@ -1631,7 +1678,9 @@ class StewardMcpServer:
             }
         )
 
-        if service == "kms":
+        if redrive_allow_policy is not None:
+            deciding_layers = {"redrive_allow_policy"}
+        elif service == "kms":
             deciding_layers = {"kms_key_policy"}
         elif principal == "*" or principal.endswith(".amazonaws.com"):
             deciding_layers = {"resource_policy"}
@@ -1643,7 +1692,7 @@ class StewardMcpServer:
         unevaluated_layers = {
             str(entry.get("layer"))
             for entry in unknowns
-            if entry.get("reason") in ("read_denied", "not_evaluated_v1")
+            if entry.get("reason") in ("read_denied", "not_evaluated_v1", "not_found")
         }
         evaluated_layers = {
             str(entry.get("layer")) for entry in ledger if entry.get("result") == "evaluated"
@@ -1682,6 +1731,8 @@ class StewardMcpServer:
             resource_policy=resource_policy,
             kms_key_policy=kms_key_policy,
             public_access_block=public_access_block,
+            permission_boundary=permission_boundary,
+            redrive_allow_policy=redrive_allow_policy,
         )
         return assemble_response(
             request=request,

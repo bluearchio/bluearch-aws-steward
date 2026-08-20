@@ -74,13 +74,14 @@ Read-only. No guarded-write surface, no approval semantics.
 
 ```jsonc
 {
-  "schema_version": "1",                   // graders pin against this
+  "schema_version": "2",                   // graders pin against this
   "status": "explained" | "not_denied" | "not_supported" | "insufficient_access",
   "verdict": {
     "effect": "explicit_deny" | "implicit_deny" | "allow" | "conditional" | "unknown",
     "blocking_layer": "identity_policy" | "resource_policy" | "kms_key_policy"
-                    | "public_access_block" | "condition_mismatch" | "scp" | "none"
-                    | "unknown"
+                    | "public_access_block" | "permission_boundary"
+                    | "redrive_allow_policy" | "condition_mismatch" | "scp"
+                    | "none" | "unknown"
   },
   "claims": [
     {
@@ -100,7 +101,7 @@ Read-only. No guarded-write surface, no approval semantics.
   "unknowns": [
     {
       "layer": "scp",                      // same frozen vocabulary as blocking_layer
-      "reason": "read_denied" | "not_evaluated_v1" | "not_applicable",
+      "reason": "read_denied" | "not_found" | "not_evaluated_v1" | "not_applicable",
       "detail": "organizations read denied; an SCP deny cannot be excluded."  // free text, not graded
     }
   ],
@@ -201,6 +202,16 @@ owns the throwaway LocalEmu, so the upgrade is free) whose response contains
 the canary identifier — the same shape as the existing `bluearch_scan_aws`
 probe, so it joins the certified chain with one probe-spec step and no new
 harness machinery.
+
+## Schema version 2 (2026-08-19, approved by the harness owner)
+
+Additive bump, atomic grader pin at "2" (no dual-accept): `blocking_layer`
+and `unknowns[].layer` gain `permission_boundary` (identity-based allows
+are intersected with the boundary; boundary denies win) and
+`redrive_allow_policy` (SQS DLQ redrive is governed by this queue control,
+not IAM — allowAll default, denyAll, byQueue vs `aws:SourceArn`);
+`unknowns[].reason` gains `not_found` (a principal that does not exist is
+not a permission denial). Nothing removed or renamed.
 
 ## Non-denial outcomes (contract note, 2026-08-19)
 

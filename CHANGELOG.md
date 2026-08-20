@@ -9,6 +9,23 @@ as preview are not covered by a stable API compatibility promise.
 
 ### Added
 
+- `bluearch_explain_denial` evaluates two new policy layers exactly
+  (response schema version 2, additive): permission boundaries
+  (identity-based allows intersected with the role's boundary; boundary
+  denies win) and the SQS `RedriveAllowPolicy` queue control (allowAll,
+  denyAll, byQueue vs `aws:SourceArn`) — ending misleading verdicts on
+  policy-less service-managed flows.
+- Exact semantics for the full common set of IAM condition operators:
+  negated operators (satisfied on absent keys), `Null`, `...IfExists`,
+  and `IpAddress`/`NotIpAddress` with real CIDR containment.
+- One-call multi-subject diagnosis: with no principal supplied and at
+  most three visible candidate roles, each candidate is evaluated in the
+  same call; an unambiguous blocked subject is answered directly,
+  explicitly labeled.
+- Principal discovery: a role that does not exist (or cannot be read)
+  comes back with the visible role names and the instruction to re-run
+  with the exact ARN, using the new `not_found` unknowns reason.
+
 - New read-only MCP tool `bluearch_explain_denial`: explains why one AWS
   request is allowed or denied by naming the exact policy statement (or
   missing permission) across identity policy, resource policy, KMS key

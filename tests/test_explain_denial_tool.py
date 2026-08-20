@@ -98,7 +98,7 @@ class ExplainDenialToolTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(result["schema_version"], "1")
+        self.assertEqual(result["schema_version"], "2")
         self.assertEqual(result["status"], "explained")
         self.assertEqual(result["verdict"]["blocking_layer"], "condition_mismatch")
         decisive = result["claims"][0]
@@ -552,6 +552,144 @@ class MultiSubjectDiagnosisTests(unittest.TestCase):
             verification["arguments"]["principal"],
             f"arn:aws:iam::{ACCOUNT}:role/workload",
         )
+
+
+class BoundedRoleProvider:
+    """Role allowed by identity policy but limited by a permissions
+    boundary that only grants reads."""
+
+    BOUNDARY_ARN = f"arn:aws:iam::{ACCOUNT}:policy/team-boundary"
+
+    def capabilities(self) -> Set[str]:
+        return set(READ_OPERATIONS)
+
+    def caller_identity(self) -> Dict[str, Any]:
+        return {
+            "Account": ACCOUNT,
+            "Arn": f"arn:aws:sts::{ACCOUNT}:assumed-role/workload/session",
+        }
+
+    def get_bucket_policy(self, bucket: str) -> Optional[Dict[str, Any]]:
+        return None
+
+    def get_public_access_block(self, bucket: str) -> Dict[str, Any]:
+        return {"BlockPublicAcls": False}
+
+    def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
+        if operation == "iam.get_role":
+            return {
+                "Role": {
+                    "RoleName": parameters["RoleName"],
+                    "PermissionsBoundary": {"PermissionsBoundaryArn": self.BOUNDARY_ARN},
+                }
+            }
+        if operation == "iam.list_attached_role_policies":
+            return {"AttachedPolicies": []}
+        if operation == "iam.list_role_policies":
+            return {"PolicyNames": ["writes"]}
+        if operation == "iam.get_role_policy":
+            return {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Sid": "AllowWrites",
+                            "Effect": "Allow",
+                            "Action": "s3:PutObject",
+                            "Resource": "arn:aws:s3:::app-data/*",
+                        }
+                    ]
+                }
+            }
+        if operation == "iam.get_policy":
+            assert parameters["PolicyArn"] == self.BOUNDARY_ARN
+            return {"Policy": {"DefaultVersionId": "v1"}}
+        if operation == "iam.get_policy_version":
+            return {
+                "PolicyVersion": {
+                    "Document": {
+                        "Statement": [
+                            {
+                                "Sid": "BoundaryReadOnly",
+                                "Effect": "Allow",
+                                "Action": "s3:GetObject",
+                                "Resource": "*",
+                            }
+                        ]
+                    }
+                }
+            }
+        raise AssertionError(f"Unexpected operation: {operation} {parameters}")
+
+
+class PermissionBoundaryCollectorTests(unittest.TestCase):
+    def test_boundary_is_read_and_named_as_the_blocking_layer(self) -> None:
+        result = _call(
+            _server(BoundedRoleProvider()),
+            {
+                "action": "s3:PutObject",
+                "resource": "arn:aws:s3:::app-data/reports/q1.csv",
+                "profile": "test-sso",
+                "region": "us-east-1",
+            },
+        )
+
+        self.assertEqual(result["status"], "explained")
+        self.assertEqual(result["verdict"]["blocking_layer"], "permission_boundary")
+        self.assertEqual(
+            result["claims"][0]["policy_ref"]["resource"],
+            BoundedRoleProvider.BOUNDARY_ARN,
+        )
+        layers = {entry["layer"]: entry["result"] for entry in result["evaluation_ledger"]}
+        self.assertEqual(layers.get("permission_boundary"), "evaluated")
+
+
+class RedriveQueueProvider:
+    DLQ_ARN = f"arn:aws:sqs:us-east-1:{ACCOUNT}:orders-dlq"
+
+    def capabilities(self) -> Set[str]:
+        return set(READ_OPERATIONS)
+
+    def caller_identity(self) -> Dict[str, Any]:
+        return {
+            "Account": ACCOUNT,
+            "Arn": f"arn:aws:sts::{ACCOUNT}:assumed-role/workload/session",
+        }
+
+    def read(self, operation: str, **parameters: Any) -> Dict[str, Any]:
+        if operation == "sqs.get_queue_url":
+            return {"QueueUrl": f"http://127.0.0.1/{ACCOUNT}/orders-dlq"}
+        if operation == "sqs.get_queue_attributes":
+            return {
+                "Attributes": {
+                    "RedriveAllowPolicy": json.dumps(
+                        {
+                            "redrivePermission": "byQueue",
+                            "sourceQueueArns": [f"arn:aws:sqs:us-east-1:{ACCOUNT}:payments"],
+                        }
+                    )
+                }
+            }
+        raise AssertionError(f"Unexpected operation: {operation} {parameters}")
+
+
+class RedriveCollectorTests(unittest.TestCase):
+    def test_sqs_service_flow_is_decided_by_the_redrive_allow_policy(self) -> None:
+        result = _call(
+            _server(RedriveQueueProvider()),
+            {
+                "action": "sqs:SendMessage",
+                "resource": RedriveQueueProvider.DLQ_ARN,
+                "principal": "sqs.amazonaws.com",
+                "condition_context": {"aws:SourceArn": f"arn:aws:sqs:us-east-1:{ACCOUNT}:orders"},
+                "profile": "test-sso",
+                "region": "us-east-1",
+            },
+        )
+
+        self.assertEqual(result["status"], "explained")
+        self.assertEqual(result["verdict"]["effect"], "explicit_deny")
+        self.assertEqual(result["verdict"]["blocking_layer"], "redrive_allow_policy")
+        self.assertIn("orders", result["claims"][0]["explanation"])
 
 
 class OperatorUserCallerProvider:
