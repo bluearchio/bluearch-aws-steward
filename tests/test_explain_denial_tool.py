@@ -515,6 +515,45 @@ class UnevaluatedDecidingLayerTests(unittest.TestCase):
         self.assertIn("not_evaluated_v1", reasons)
 
 
+class ServerNeverDiesTests(unittest.TestCase):
+    def test_unexpected_tool_exception_returns_error_instead_of_killing_the_server(
+        self,
+    ) -> None:
+        """The diagnosis sandbox has no aws binary; a provider factory
+        crash there escaped the tools/call boundary and killed the stdio
+        server (mcp_protocol_failure). Any unexpected exception must come
+        back as an isError response."""
+
+        def _exploding_factory(_arguments):
+            raise RuntimeError("aws binary not present in this sandbox")
+
+        server = StewardMcpServer(
+            aws_context_loader=lambda: {"profiles": ["test-sso"], "default_profile": "test-sso"},
+            aws_provider_factory=_exploding_factory,
+        )
+        response = server.handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "bluearch_explain_denial",
+                    "arguments": {
+                        "action": "s3:GetObject",
+                        "resource": "arn:aws:s3:::app-data/x",
+                        "principal": f"arn:aws:iam::{ACCOUNT}:role/workload",
+                        "profile": "test-sso",
+                        "region": "us-east-1",
+                    },
+                },
+            }
+        )
+
+        assert response is not None
+        self.assertTrue(response["result"]["isError"])
+        self.assertIn("internal error", response["result"]["content"][0]["text"].lower())
+
+
 class ResponseBudgetTests(unittest.TestCase):
     def test_oversized_statement_evidence_is_trimmed_with_a_digest(self) -> None:
         big_statement = {
